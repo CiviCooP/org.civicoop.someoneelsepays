@@ -4,6 +4,25 @@ require_once 'someoneelsepays.civix.php';
 use CRM_Someoneelsepays_ExtensionUtil as E;
 
 /**
+ * Implements hook_civicrm_buildForm().
+ *
+ * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_buildForm/
+ */
+function someoneelsepays_civicrm_buildForm($formName, &$form) {
+  CRM_Someoneelsepays_Sep::buildForm($formName, $form);
+}
+
+/**
+ * Implements hook_civicrm_postProcess().
+ *
+ * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_postProcess/
+ */
+function someoneelsepays_civicrm_postProcess($formName, &$form) {
+  CRM_Someoneelsepays_Sep::postProcess($formName, $form);
+}
+
+
+/**
  * Implements hook_civicrm_config().
  *
  * @link http://wiki.civicrm.org/confluence/display/CRMDOC/hook_civicrm_config

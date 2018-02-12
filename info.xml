@@ -1,27 +1,29 @@
 <?xml version="1.0"?>
 <extension key="org.civicoop.someoneelsepays" type="module">
-  <file>someoneelsepays</file>
-  <name>FIXME</name>
-  <description>FIXME</description>
-  <license>AGPL-3.0</license>
-  <maintainer>
-    <author>Erik Hommel</author>
-    <email>hommel@ee-atwork.nl</email>
-  </maintainer>
-  <urls>
-    <url desc="Main Extension Page">http://FIXME</url>
-    <url desc="Documentation">http://FIXME</url>
-    <url desc="Support">http://FIXME</url>
-    <url desc="Licensing">http://www.gnu.org/licenses/agpl-3.0.html</url>
-  </urls>
-  <releaseDate>2018-01-30</releaseDate>
-  <version>1.0</version>
-  <develStage>alpha</develStage>
-  <compatibility>
-    <ver>4.7</ver>
-  </compatibility>
-  <comments>This is a new, undeveloped module</comments>
-  <civix>
-    <namespace>CRM/Someoneelsepays</namespace>
-  </civix>
+    <file>someoneelsepays</file>
+    <name>CiviCRM native extension to get someone else to pay for a contribution</name>
+    <description>Extension allows assigning the payment for an event or membership to someone else</description>
+    <license>AGPL-3.0</license>
+    <maintainer>
+        <author>Erik Hommel (CiviCooP)</author>
+        <author>Klaas Eikelboom (CIviCooP)</author>0
+        <email>erik.hommel@civicoop.org</email>
+        <email>klaas.eikelboom@civicoop.org</email>
+    </maintainer>
+    <urls>
+        <url desc="Main Extension Page">https://github.com/CiviCooP/org.civicoop.someoneelsepays</url>
+        <url desc="Documentation">https://github.com/CiviCooP/org.civicoop.someoneelsepays</url>
+        <url desc="Support">https://civicoop.org</url>
+        <url desc="Licensing">http://www.gnu.org/licenses/agpl-3.0.html</url>
+    </urls>
+    <releaseDate>2018-01-31</releaseDate>
+    <version>1.0</version>
+    <develStage>alpha</develStage>
+    <compatibility>
+        <ver>4.7</ver>
+    </compatibility>
+    <comments>Extension is being developed</comments>
+    <civix>
+        <namespace>CRM/Someoneelsepays</namespace>
+    </civix>
 </extension>

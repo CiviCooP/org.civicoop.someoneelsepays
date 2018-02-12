@@ -11,9 +11,8 @@ class CRM_Someoneelsepays_Upgrader extends CRM_Someoneelsepays_Upgrader_Base {
 
   /**
    * Create table on install
-   */
+   *
   public function install() {
-    $this->executeSqlFile('sql/createContributionPayer.sql');
   }
 
   /**
