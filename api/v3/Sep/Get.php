@@ -49,7 +49,6 @@ function _civicrm_api3_sep_Get_spec(&$spec) {
  * @return array API result descriptor
  * @see civicrm_api3_create_success
  * @see civicrm_api3_create_error
- * @throws API_Exception
  */
 function civicrm_api3_sep_Get($params) {
   if (isset($params['entity_type'])) {
@@ -59,12 +58,10 @@ function civicrm_api3_sep_Get($params) {
     $sep = new CRM_Someoneelsepays_Sep();
   }
   $valid = $sep->validApiGetParams($params);
-  if ($valid == TRUE) {
+  if ($valid['is_valid'] == TRUE) {
     return civicrm_api3_create_success($sep->apiGet($params), $params, 'Sep', 'Get');
   }
   else {
-    throw new API_Exception(ts('Invalid parameters for Sep Get: ' . $valid), 1010, array(
-      'domain' => 'org.civicoop.someoneelsepays',
-      ));
+    return civicrm_api3_create_error(ts('Invalid parameters for Sep get: ' . $valid['error_message']), $params);
   }
 }
