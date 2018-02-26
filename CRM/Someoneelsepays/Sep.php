@@ -32,36 +32,102 @@ class CRM_Someoneelsepays_Sep {
   }
 
   /**
+   * Method to create a someone else pays situation
+   *
+   * @param $params
+   * @return bool|array
+   */
+  public function create($params) {
+    // payer_id, beneficiary_id, entity_type and entity_id are required
+    $requiredParams = array('payer_id', 'entity_type', 'entity_id');
+    foreach ($requiredParams as $requiredParam) {
+      if (!isset($params[$requiredParam]) || empty($params[$requiredParam])) {
+        CRM_Core_Error::createError(ts('Required parameter ') . $requiredParam .
+          ts(' not found or empty in ') . __METHOD__ . ' (extension org.civicoop.someoneelsepays)');
+        return FALSE;
+      }
+    }
+    $params['entity_type'] = strtolower($params['entity_type']);
+    // error if invalid entity type
+    if (!in_array($params['entity_type'], $this->_validEntityTypes)) {
+      CRM_Core_Error::createError(ts('Invalid entity type ') . $params['entity_type'] . ' in ' . __METHOD__
+        . ' (extension org.civicoop.someoneelsepays)');
+      return FALSE;
+    }
+    $this->setDaoStuffWithType($params['entity_type']);
+    // move contribution to payer if necessary
+    $this->moveContribution($params['entity_id'], $params['payer_id']);
+    return civicrm_api3('Sep', 'getsingle', $params);
+  }
+
+  /**
+   * Method to move contribution to payer if required
+   *
+   * @param int $entityId
+   * @param int $payerId
+   */
+  private function moveContribution($entityId, $payerId) {
+    // get entity payment contribution_id
+    $entityQuery = 'SELECT contribution_id FROM ' . $this->_entityTable . ' WHERE ' . $this->_entityIdColumn . ' = %1';
+    $contributionId = (int) CRM_Core_DAO::singleValueQuery($entityQuery, array(
+      1 => array($entityId, 'Integer'),
+    ));
+    // move contribution
+    $update = "UPDATE civicrm_contribution SET contact_id = %1 WHERE id = %2 AND contact_id != %1";
+    CRM_Core_DAO::executeQuery($update, array(
+      1 => array($payerId, 'Integer'),
+      2 => array($contributionId, 'Integer'),
+    ));
+  }
+
+  /**
    * Method to determine if the params coming from the API Get are valid
    *
    * @param $params
-   * @return bool
+   * @return array
    */
   public function validApiGetParams($params) {
     // invalid if no entity_type or contribution_id
     if (!isset($params['entity_type']) && !isset($params['contribution_id'])) {
-      return ts('Entity_type or contribution_id are required');
+      return array(
+        'is_valid' => FALSE,
+        'error_message' => ts('entity_type or contribution_id are required'),
+      );
     }
 
     // invalid if there is an entity_id but no entity_type
     if (isset($params['entity_id']) && !isset($params['entity_type'])) {
-      return ts('found entity_id but did not find entity_type, either both or none are valid');
+      return array(
+        'is_valid' => FALSE,
+        'error_message' => ts('found entity_id but did not find entity_type, either both or none are valid'),
+      );
     }
     // invalid if entity type but invalid type
     if (isset($params['entity_type'])) {
       if (!in_array($params['entity_type'], $this->_validEntityTypes)) {
-        return ts('entity_type ' . $params['entity_type'] . ' is not valid');
+        return array(
+          'is_valid' => FALSE,
+          'error_message' => ts('entity_type ' . $params['entity_type'] . ' is not valid'),
+        );
       }
     }
     // invalid if parameters is not an array
     if (!is_array($params)) {
-      return ts('Expecting array of parameters, not found');
+      return array(
+        'is_valid' => FALSE,
+        'error_message' => ts('expecting array of parameters, not found'),
+      );
     }
     // invalid if there are no parameters at all
     if (empty($params)) {
-      return ts('No parameters found, getting all sep records will impact performance');
+      return array(
+        'is_valid' => FALSE,
+        'error_message' => ts('no parameters found, getting all sep records will impact performance'),
+      );
     }
-    return TRUE;
+    return array(
+      'is_valid' => TRUE,
+    );
   }
 
   /**
@@ -108,7 +174,8 @@ class CRM_Someoneelsepays_Sep {
     ));
     if ($count > 0) {
       return 'membership';
-    } else {
+    }
+    else {
       return 'participant';
     }
   }
@@ -122,20 +189,20 @@ class CRM_Someoneelsepays_Sep {
   private function generateQueryEntityType($params) {
     $result = array();
     $index = 0;
-    $whereClauses = array();
+    $where = 'WHERE cont.contact_id != base.contact_id';
     if (isset($params['entity_id'])) {
       $index++;
-      $whereClauses[] = $this->_entityIdColumn . ' = %' . $index;
+      $where .= ' AND ' . $this->_entityIdColumn . ' = %' . $index;
       $result['params'][$index] = array($params['entity_id'], 'Integer');
     }
     if (isset($params['payer_id'])) {
       $index++;
-      $whereClauses[] = 'cont.contact_id = %' . $index;
+      $where .= ' AND cont.contact_id = %' . $index;
       $result['params'][$index] = array($params['payer_id'], 'Integer');
     }
     if (isset($params['beneficiary_id'])) {
       $index++;
-      $whereClauses[] = 'base.contact_id = %' . $index;
+      $where .= ' AND base.contact_id = %' . $index;
       $result['params'][$index] = array($params['beneficiary_id'], 'Integer');
     }
 
@@ -143,10 +210,7 @@ class CRM_Someoneelsepays_Sep {
         $this->_entityType . '" AS entity_type, cont.id AS contribution_id, base.contact_id AS beneficiary_id
         FROM ' . $this->_entityTable . ' pay
         JOIN civicrm_contribution cont ON cont.id = pay.contribution_id
-        JOIN ' . $this->_baseTable . ' base ON pay.' . $this->_entityIdColumn . ' = base.id';
-    if (!empty($whereClauses)) {
-      $result['query'] .= ' WHERE ' . implode(' AND ', $whereClauses);
-    }
+        JOIN ' . $this->_baseTable . ' base ON pay.' . $this->_entityIdColumn . ' = base.id ' . $where;
     return $result;
   }
 
@@ -159,7 +223,7 @@ class CRM_Someoneelsepays_Sep {
   private function generateQueryContributionId($params) {
     $result = array();
     $index = 1;
-    $where = 'WHERE cont.id = %1';
+    $where = 'WHERE cont.id = %1 AND cont.contact_id != base.contact_id';
     $result['params'][1] = array($params['contribution_id'], 'Integer');
     if (isset($params['entity_id'])) {
       $index++;
