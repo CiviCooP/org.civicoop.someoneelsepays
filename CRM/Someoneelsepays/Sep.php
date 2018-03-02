@@ -286,6 +286,7 @@ class CRM_Someoneelsepays_Sep {
             $submitValues = $form->getVar('_submitValues');
             $sep->updateContributionContact($membershipId, $submitValues);
             break;
+
           case CRM_Core_Action::ADD:
             $submitValues = $form->getVar('_submitValues');
             if (isset($submitValues['soft_credit_type_id']) && $submitValues['soft_credit_type_id'] == CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId()) {
