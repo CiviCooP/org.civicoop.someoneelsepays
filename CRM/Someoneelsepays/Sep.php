@@ -278,19 +278,126 @@ class CRM_Someoneelsepays_Sep {
     switch ($formName) {
       case 'CRM_Member_Form_Membership':
         $formAction = $form->getVar('_action');
-        // if edit, update contribution contact_id if required
-        if ($formAction == CRM_Core_Action::UPDATE) {
-          $submitValues = $form->getVar('_submitValues');
-          $sep = new CRM_Someoneelsepays_Sep('membership');
-          $sep->updateContributionContact($submitValues);
+        $membershipId = $form->getVar('_id');
+        $sep = new CRM_Someoneelsepays_Sep('membership');
+        switch ($formAction) {
+          // if edit, update contribution contact_id if required
+          case CRM_Core_Action::UPDATE:
+            $submitValues = $form->getVar('_submitValues');
+            $sep->updateContributionContact($membershipId, $submitValues);
+            break;
+          case CRM_Core_Action::ADD:
+            $submitValues = $form->getVar('_submitValues');
+            if (isset($submitValues['soft_credit_type_id']) && $submitValues['soft_credit_type_id'] == CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId()) {
+              if (isset($submitValues['soft_credit_contact_id']) && !empty($submitValues['soft_credit_contact_id'])) {
+                // remove system generated soft credit
+                $sep->removeSoftCredit($membershipId);
+                // update the line item label so the name of the member appears on the invoice
+                $sep->updateLineItemLabel($membershipId);
+                // update the contribution source so the name of the member appears on the contribution forms
+                $sep->updateContributionSource($membershipId);
+              }
+            }
+            break;
         }
         break;
-
     }
   }
-  private function updateContributionContact($params) {
-    CRM_Core_Error::debug('params', $params);
-    exit();
+
+  private function updateContributionSource($entityId) {
+    $entityQuery = "SELECT contribution_id FROM " . $this->_entityTable . " WHERE " . $this->_entityIdColumn . " = %1";
+    $contributionId = CRM_Core_DAO::singleValueQuery($entityQuery, array(
+      1 => array($entityId, 'Integer'),
+    ));
+    if ($contributionId) {
+      $contributionQuery = "SELECT source FROM civicrm_contribution WHERE id = %1";
+      $currentSource = CRM_Core_DAO::singleValueQuery($contributionQuery, array(
+        1 => array($contributionId, 'Integer'),
+      ));
+      // keep the part before the : which holds the membership type or the event title and replace the second part
+      $sourceParts = explode(':', $currentSource);
+      $nameQuery = "SELECT cont.display_name 
+      FROM " . $this->_baseTable . " base
+      JOIN civicrm_contact cont ON base.contact_id = cont.id
+      WHERE base.id = %1";
+      $displayName = CRM_Core_DAO::singleValueQuery($nameQuery, array(1 => array($entityId, 'Integer')));
+      if ($displayName) {
+        $newSource = $sourceParts[0] . ' (on behalf of ' . $displayName . ')';
+        $update = "UPDATE civicrm_contribution SET source = %1 WHERE id = %2";
+        CRM_Core_DAO::executeQuery($update, array(
+          1 => array($newSource, 'String'),
+          2 => array($contributionId, 'Integer'),
+        ));
+      }
+    }
+  }
+
+  /**
+   * Method to update the label of the line item
+   *
+   * @param $entityId
+   */
+  private function updateLineItemLabel($entityId) {
+    $lineItemQuery = "SELECT label FROM civicrm_line_item WHERE entity_table = %1 AND entity_id = %2";
+    $params = array(
+      1 => array($this->_baseTable, 'String'),
+      2 => array($entityId, 'Integer'),
+    );
+    $currentLabel = CRM_Core_DAO::singleValueQuery($lineItemQuery, $params);
+    $nameQuery = "SELECT cont.display_name 
+      FROM " . $this->_baseTable . " base
+      JOIN civicrm_contact cont ON base.contact_id = cont.id
+      WHERE base.id = %1";
+    $displayName = CRM_Core_DAO::singleValueQuery($nameQuery, array(1 => array($entityId, 'Integer')));
+    $params[3] = array($currentLabel . ts(' (on behalf of ') . $displayName . ')', 'String');
+    $update = "UPDATE civicrm_line_item SET label = %3 WHERE entity_table = %1 AND entity_id = %2";
+    CRM_Core_DAO::executeQuery($update, $params);
+  }
+
+  /**
+   * Method to remove soft credit once created for other payer
+   *
+   * @param $entityId
+   */
+  private function removeSoftCredit($entityId) {
+    $query = 'SELECT contribution_id FROM ' . $this->_entityTable . ' WHERE ' . $this->_entityIdColumn . ' = %1';
+    $contributionId = CRM_Core_DAO::singleValueQuery($query, array(
+      1 => array($entityId, 'Integer'),
+    ));
+    if ($contributionId) {
+      $delete = 'DELETE FROM civicrm_contribution_soft WHERE contribution_id = %1 AND soft_credit_type_id = %2';
+      CRM_Core_DAO::executeQuery($delete, array(
+        1 => array($contributionId, 'Integer'),
+        2 => array(CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId(), 'Integer'),
+      ));
+    }
+  }
+
+  /**
+   * Method to update the contribution contact
+   *
+   * @param $membershipId
+   * @param $params
+   */
+  private function updateContributionContact($membershipId, $params) {
+    if (isset($params['sep_payer_id'])) {
+      // replace with entity contact if payer is empty
+      if (empty($params['sep_payer_id'])) {
+        try {
+          $params['sep_payer_id'] = civicrm_api3('Membership', 'getvalue', array(
+            'id' => $membershipId,
+            'return' => 'contact_id',
+          ));
+        }
+        catch (CiviCRM_API3_Exception $ex) {
+          CRM_Core_Error::debug_log_message(ts('Could not find contact_id for membership with id ') . $membershipId
+            . ts(' with API Membership getvalue in ') . __METHOD__ . ' (extension org.civicoop.someoneelsepays)');
+        }
+      }
+      if (!empty($params['sep_payer_id'])) {
+        $this->moveContribution($membershipId, (int) $params['sep_payer_id']);
+      }
+    }
   }
 
   /**
@@ -316,6 +423,11 @@ class CRM_Someoneelsepays_Sep {
           CRM_Core_Region::instance('page-body')->add(array(
             'template' => 'SepEdit.tpl'));
         }
+        break;
+
+      case CRM_Core_Action::ADD:
+        $form->setDefaults(array('soft_credit_type_id' => CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId()));
+        CRM_Core_Region::instance('page-body')->add(array('template' => 'SepAdd.tpl'));
         break;
     }
   }

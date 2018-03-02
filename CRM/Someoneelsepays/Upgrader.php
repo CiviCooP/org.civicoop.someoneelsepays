@@ -10,9 +10,22 @@ class CRM_Someoneelsepays_Upgrader extends CRM_Someoneelsepays_Upgrader_Base {
   // upgrade tasks. They are executed in order (like Drupal's hook_update_N).
 
   /**
-   * Create table on install
+   * Create specific reserved soft_credit_type to only be used by extension
    *
+   */
   public function install() {
+    $params = array(
+      'option_group_id' => 'soft_credit_type',
+      'name' => 'sep_default_soft_credit_type',
+      'label' => ts('Someone Else Pays - system only, do not use!'),
+      'is_active' => 1,
+      'is_reserved' => 1,
+    );
+    try {
+      civicrm_api3('OptionValue', 'create', $params);
+    } catch (CiviCRM_API3_Exception $ex) {
+      CRM_Core_Error::debug_log_message(ts('Not able to add default soft credit type for extension org.civicoop.someoneelsepays'));
+    }
   }
 
   /**

@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <extension key="org.civicoop.someoneelsepays" type="module">
     <file>someoneelsepays</file>
-    <name>CiviCRM native extension to get someone else to pay for a contribution</name>
+    <name>CiviCRM native extension to get someone else to pay for a membership or event registration</name>
     <description>Extension allows assigning the payment for an event or membership to someone else</description>
     <license>AGPL-3.0</license>
     <maintainer>
