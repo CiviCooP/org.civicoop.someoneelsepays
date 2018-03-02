@@ -23,7 +23,8 @@ class CRM_Someoneelsepays_Upgrader extends CRM_Someoneelsepays_Upgrader_Base {
     );
     try {
       civicrm_api3('OptionValue', 'create', $params);
-    } catch (CiviCRM_API3_Exception $ex) {
+    }
+    catch (CiviCRM_API3_Exception $ex) {
       CRM_Core_Error::debug_log_message(ts('Not able to add default soft credit type for extension org.civicoop.someoneelsepays'));
     }
   }
