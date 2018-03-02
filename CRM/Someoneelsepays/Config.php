@@ -18,7 +18,7 @@ class CRM_Someoneelsepays_Config {
   /**
    * CRM_Someoneelsepays_Config constructor.
    */
-  function __construct() {
+  public function __construct() {
     try {
       $this->_contributionStatusOptionGroupId = civicrm_api3('OptionGroup', 'getvalue', array(
           'name' => 'contribution_status',
@@ -32,7 +32,7 @@ class CRM_Someoneelsepays_Config {
       $this->_sepSoftCreditTypeId = civicrm_api3('OptionValue', 'getvalue', array(
         'option_gorup_id' => 'soft_credit_type',
         'name' => 'sep_default_soft_credit_type',
-        'return' =>  'value',
+        'return' => 'value',
       ));
     }
     catch (CiviCRM_API3_Exception $ex) {
@@ -71,4 +71,5 @@ class CRM_Someoneelsepays_Config {
     }
     return self::$_singleton;
   }
+
 }
