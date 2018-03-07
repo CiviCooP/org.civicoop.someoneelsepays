@@ -20,7 +20,7 @@ class CRM_Someoneelsepays_Sep {
    * @param null $entityType
    */
   public function __construct($entityType = NULL) {
-    $this->_validEntityTypes = array('membership', 'participant');
+    $this->_validEntityTypes = ['membership', 'participant'];
     if (!empty($entityType)) {
       if (!in_array(strtolower($entityType), $this->_validEntityTypes)) {
         CRM_Core_Error::createError('Trying to access ' . __CLASS__ . ' with invalid entity type (extension org.civicoop.someoneelsepays)');
@@ -69,15 +69,15 @@ class CRM_Someoneelsepays_Sep {
   private function moveContribution($entityId, $payerId) {
     // get entity payment contribution_id
     $entityQuery = 'SELECT contribution_id FROM ' . $this->_entityTable . ' WHERE ' . $this->_entityIdColumn . ' = %1';
-    $contributionId = (int) CRM_Core_DAO::singleValueQuery($entityQuery, array(
-      1 => array($entityId, 'Integer'),
-    ));
+    $contributionId = (int) CRM_Core_DAO::singleValueQuery($entityQuery, [
+      1 => [$entityId, 'Integer'],
+    ]);
     // move contribution
     $update = "UPDATE civicrm_contribution SET contact_id = %1 WHERE id = %2 AND contact_id != %1";
-    CRM_Core_DAO::executeQuery($update, array(
-      1 => array($payerId, 'Integer'),
-      2 => array($contributionId, 'Integer'),
-    ));
+    CRM_Core_DAO::executeQuery($update, [
+      1 => [$payerId, 'Integer'],
+      2 => [$contributionId, 'Integer'],
+    ]);
   }
 
   /**
@@ -89,45 +89,43 @@ class CRM_Someoneelsepays_Sep {
   public function validApiGetParams($params) {
     // invalid if no entity_type or contribution_id
     if (!isset($params['entity_type']) && !isset($params['contribution_id'])) {
-      return array(
+      return [
         'is_valid' => FALSE,
         'error_message' => ts('entity_type or contribution_id are required'),
-      );
+      ];
     }
 
     // invalid if there is an entity_id but no entity_type
     if (isset($params['entity_id']) && !isset($params['entity_type'])) {
-      return array(
+      return [
         'is_valid' => FALSE,
         'error_message' => ts('found entity_id but did not find entity_type, either both or none are valid'),
-      );
+      ];
     }
     // invalid if entity type but invalid type
     if (isset($params['entity_type'])) {
       if (!in_array($params['entity_type'], $this->_validEntityTypes)) {
-        return array(
+        return [
           'is_valid' => FALSE,
           'error_message' => ts('entity_type ' . $params['entity_type'] . ' is not valid'),
-        );
+        ];
       }
     }
     // invalid if parameters is not an array
     if (!is_array($params)) {
-      return array(
+      return [
         'is_valid' => FALSE,
         'error_message' => ts('expecting array of parameters, not found'),
-      );
+      ];
     }
     // invalid if there are no parameters at all
     if (empty($params)) {
-      return array(
+      return [
         'is_valid' => FALSE,
         'error_message' => ts('no parameters found, getting all sep records will impact performance'),
-      );
+      ];
     }
-    return array(
-      'is_valid' => TRUE,
-    );
+    return ['is_valid' => TRUE];
   }
 
   /**
@@ -137,8 +135,8 @@ class CRM_Someoneelsepays_Sep {
    * @return array
    */
   public function apiGet($params) {
-    $result = array();
-    $queryArray = array();
+    $result = [];
+    $queryArray = [];
     if (!isset($params['entity_type'])) {
       $params['entity_type'] = $this->findEntityTypeForContribution($params['contribution_id']);
     }
@@ -169,9 +167,9 @@ class CRM_Someoneelsepays_Sep {
    */
   private function findEntityTypeForContribution($contributionId) {
     $query = 'SELECT COUNT(*) FROM civicrm_membership_payment WHERE contribution_id = %1';
-    $count = CRM_Core_DAO::singleValueQuery($query, array(
-       1 => array($contributionId, 'Integer'),
-    ));
+    $count = CRM_Core_DAO::singleValueQuery($query, [
+       1 => [$contributionId, 'Integer'],
+    ]);
     if ($count > 0) {
       return 'membership';
     }
@@ -286,49 +284,80 @@ class CRM_Someoneelsepays_Sep {
             $submitValues = $form->getVar('_submitValues');
             $sep->updateContributionContact($membershipId, $submitValues);
             break;
-
-          case CRM_Core_Action::ADD:
-            $submitValues = $form->getVar('_submitValues');
-            if (isset($submitValues['soft_credit_type_id']) && $submitValues['soft_credit_type_id'] == CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId()) {
-              if (isset($submitValues['soft_credit_contact_id']) && !empty($submitValues['soft_credit_contact_id'])) {
-                // remove system generated soft credit
-                $sep->removeSoftCredit($membershipId);
-                // update the line item label so the name of the member appears on the invoice
-                $sep->updateLineItemLabel($membershipId);
-                // update the contribution source so the name of the member appears on the contribution forms
-                $sep->updateContributionSource($membershipId);
-              }
-            }
-            break;
         }
         break;
     }
   }
 
+  /**
+   * Method to process new membership payments or participant payment
+   * @param $op
+   * @param $objectName
+   * @param $objectId
+   * @param $objectRef
+   */
+  public static function post($op, $objectName, $objectId, $objectRef) {
+    switch ($objectName) {
+      case 'MembershipPayment':
+        if ($op == 'create') {
+          $sep = new CRM_Someoneelsepays_Sep('membership');
+          if ($sep->isSepPayment($objectId)) {
+            $sep->removeSoftCredit($objectRef->membership_id);
+            $sep->updateLineItemLabel($objectRef->membership_id);
+            $sep->updateContributionSource($objectRef->membership_id);
+          }
+        }
+        break;
+    }
+  }
+
+  /**
+   * Method to determine if membership or participant payment is a SEP case
+   * (based on soft credit)
+   *
+   * @param $entityPaymentId
+   * @return bool
+   */
+  public function isSepPayment($entityPaymentId) {
+    $query = 'SELECT COUNT(*)
+      FROM ' . $this->_entityTable . ' AS pay 
+      JOIN civicrm_contribution_soft AS soft ON pay.contribution_id = soft.contribution_id AND soft.soft_credit_type_id = %1
+      WHERE pay.id > %2';
+    $count = CRM_Core_DAO::singleValueQuery($query, [
+      1 => [CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId(), 'Integer'],
+      2 => [$entityPaymentId, 'Integer']
+    ]);
+    if ($count > 0) {
+      return TRUE;
+    }
+    return FALSE;
+  }
+
+  /**
+   * Method to update contribution source showing the on behalf of
+   *
+   * @param $entityId
+   */
   private function updateContributionSource($entityId) {
     $entityQuery = "SELECT contribution_id FROM " . $this->_entityTable . " WHERE " . $this->_entityIdColumn . " = %1";
-    $contributionId = CRM_Core_DAO::singleValueQuery($entityQuery, array(
-      1 => array($entityId, 'Integer'),
-    ));
+    $contributionId = CRM_Core_DAO::singleValueQuery($entityQuery, [1 => [$entityId, 'Integer']]);
     if ($contributionId) {
       $contributionQuery = "SELECT source FROM civicrm_contribution WHERE id = %1";
-      $currentSource = CRM_Core_DAO::singleValueQuery($contributionQuery, array(
-        1 => array($contributionId, 'Integer'),
-      ));
+      $currentSource = CRM_Core_DAO::singleValueQuery($contributionQuery, [1 => [$contributionId, 'Integer']]);
       // keep the part before the : which holds the membership type or the event title and replace the second part
       $sourceParts = explode(':', $currentSource);
       $nameQuery = "SELECT cont.display_name 
       FROM " . $this->_baseTable . " base
       JOIN civicrm_contact cont ON base.contact_id = cont.id
       WHERE base.id = %1";
-      $displayName = CRM_Core_DAO::singleValueQuery($nameQuery, array(1 => array($entityId, 'Integer')));
+      $displayName = CRM_Core_DAO::singleValueQuery($nameQuery, [1 => [$entityId, 'Integer']]);
       if ($displayName) {
         $newSource = $sourceParts[0] . ' (on behalf of ' . $displayName . ')';
         $update = "UPDATE civicrm_contribution SET source = %1 WHERE id = %2";
-        CRM_Core_DAO::executeQuery($update, array(
-          1 => array($newSource, 'String'),
-          2 => array($contributionId, 'Integer'),
-        ));
+        CRM_Core_DAO::executeQuery($update, [
+          1 => [$newSource, 'String'],
+          2 => [$contributionId, 'Integer']
+        ]);
       }
     }
   }
@@ -340,17 +369,17 @@ class CRM_Someoneelsepays_Sep {
    */
   private function updateLineItemLabel($entityId) {
     $lineItemQuery = "SELECT label FROM civicrm_line_item WHERE entity_table = %1 AND entity_id = %2";
-    $params = array(
-      1 => array($this->_baseTable, 'String'),
-      2 => array($entityId, 'Integer'),
-    );
+    $params = [
+      1 => [$this->_baseTable, 'String'],
+      2 => [$entityId, 'Integer'],
+    ];
     $currentLabel = CRM_Core_DAO::singleValueQuery($lineItemQuery, $params);
     $nameQuery = "SELECT cont.display_name 
       FROM " . $this->_baseTable . " base
       JOIN civicrm_contact cont ON base.contact_id = cont.id
       WHERE base.id = %1";
-    $displayName = CRM_Core_DAO::singleValueQuery($nameQuery, array(1 => array($entityId, 'Integer')));
-    $params[3] = array($currentLabel . ts(' (on behalf of ') . $displayName . ')', 'String');
+    $displayName = CRM_Core_DAO::singleValueQuery($nameQuery, [1 => [$entityId, 'Integer']]);
+    $params[3] = [$currentLabel . ts(' (on behalf of ') . $displayName . ')', 'String'];
     $update = "UPDATE civicrm_line_item SET label = %3 WHERE entity_table = %1 AND entity_id = %2";
     CRM_Core_DAO::executeQuery($update, $params);
   }
@@ -362,15 +391,13 @@ class CRM_Someoneelsepays_Sep {
    */
   private function removeSoftCredit($entityId) {
     $query = 'SELECT contribution_id FROM ' . $this->_entityTable . ' WHERE ' . $this->_entityIdColumn . ' = %1';
-    $contributionId = CRM_Core_DAO::singleValueQuery($query, array(
-      1 => array($entityId, 'Integer'),
-    ));
+    $contributionId = CRM_Core_DAO::singleValueQuery($query, [1 => [$entityId, 'Integer']]);
     if ($contributionId) {
       $delete = 'DELETE FROM civicrm_contribution_soft WHERE contribution_id = %1 AND soft_credit_type_id = %2';
-      CRM_Core_DAO::executeQuery($delete, array(
-        1 => array($contributionId, 'Integer'),
-        2 => array(CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId(), 'Integer'),
-      ));
+      CRM_Core_DAO::executeQuery($delete, [
+        1 => [$contributionId, 'Integer'],
+        2 => [CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId(), 'Integer'],
+      ]);
     }
   }
 
@@ -385,10 +412,10 @@ class CRM_Someoneelsepays_Sep {
       // replace with entity contact if payer is empty
       if (empty($params['sep_payer_id'])) {
         try {
-          $params['sep_payer_id'] = civicrm_api3('Membership', 'getvalue', array(
+          $params['sep_payer_id'] = civicrm_api3('Membership', 'getvalue', [
             'id' => $membershipId,
             'return' => 'contact_id',
-          ));
+          ]);
         }
         catch (CiviCRM_API3_Exception $ex) {
           CRM_Core_Error::debug_log_message(ts('Could not find contact_id for membership with id ') . $membershipId
@@ -415,20 +442,18 @@ class CRM_Someoneelsepays_Sep {
         $sepData = $sep->getSepDetailsWithEntity($membershipId, 'membership');
         if ($sepData) {
           $form->assign('sep_data', $sepData);
-          $form->addEntityRef('sep_payer_id', ts('Select Contact to Change Payer'), array(
-            'api' => array(
-              'params' => array('is_deceased' => 0),
-            ),
-          ));
-          $form->setDefaults(array('sep_payer_id' => $sepData['payer_id']));
-          CRM_Core_Region::instance('page-body')->add(array(
-            'template' => 'SepEdit.tpl'));
+          $form->addEntityRef('sep_payer_id', ts('Select Contact to Change Payer'), [
+            'api' => ['params' => ['is_deceased' => 0]],
+          ]);
+          $form->setDefaults(['sep_payer_id' => $sepData['payer_id']]);
+          CRM_Core_Region::instance('page-body')->add([
+            'template' => 'SepEdit.tpl']);
         }
         break;
 
       case CRM_Core_Action::ADD:
-        $form->setDefaults(array('soft_credit_type_id' => CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId()));
-        CRM_Core_Region::instance('page-body')->add(array('template' => 'SepAdd.tpl'));
+        $form->setDefaults(['soft_credit_type_id' => CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId()]);
+        CRM_Core_Region::instance('page-body')->add(['template' => 'SepAdd.tpl']);
         break;
     }
   }
@@ -451,8 +476,7 @@ class CRM_Someoneelsepays_Sep {
       $sepActionLinks[] = '<a class="action-item crm-hover-button" title="Edit Contribution" href="' . $editUrl . '">' . ts("Edit") . '</a>';
       $form->assign('sep_data', $sepData);
       $form->assign('sep_action_links', $sepActionLinks);
-      CRM_Core_Region::instance('page-body')->add(array(
-        'template' => 'SepView.tpl'));
+      CRM_Core_Region::instance('page-body')->add(['template' => 'SepView.tpl']);
     }
   }
 
@@ -464,7 +488,7 @@ class CRM_Someoneelsepays_Sep {
    */
   public function getSepDetailsWithContribution($contributionId) {
     $this->setEntityTypeWithContribution($contributionId);
-    $result = array();
+    $result = [];
     $query = 'SELECT cont.contact_id as payer_id, payer.display_name AS payer_display_name, base.contact_id AS beneficiary_id, 
       bene.display_name AS beneficiary_display_name, ' . $this->_entityType . ' AS entity_type, pay.'
       . $this->_entityIdColumn . ' AS entity_id, cont.id AS contribution_id, fin.name AS financial_type, 
@@ -479,9 +503,7 @@ class CRM_Someoneelsepays_Sep {
       JOIN civicrm_option_value ov ON cont.contribution_status_id = ov.value AND ov.option_group_id = '
       . CRM_Someoneelsepays_Config::singleton()->getContributionStatusOptionGroupId() . '
       WHERE cont.id = %1 AND cont.contact_id != base.contact_id';
-    $queryParams = array(
-      1 => array($contributionId, 'Integer'),
-    );
+    $queryParams = [1 => [$contributionId, 'Integer']];
     $dao = CRM_Core_DAO::executeQuery($query, $queryParams);
     if ($dao->fetch()) {
       $result = CRM_Someoneelsepays_Utils::moveDaoToArray($dao);
@@ -505,7 +527,7 @@ class CRM_Someoneelsepays_Sep {
     else {
       $this->setDaoStuffWithType($entityType);
     }
-    $result = array();
+    $result = [];
     $query = 'SELECT cont.contact_id as payer_id, payer.display_name AS payer_display_name, base.contact_id AS beneficiary_id, 
       bene.display_name AS beneficiary_display_name, ' . $this->_entityType . ' AS entity_type, pay.'
       . $this->_entityIdColumn . ' AS entity_id, cont.id AS contribution_id, fin.name AS financial_type, 
@@ -520,10 +542,10 @@ class CRM_Someoneelsepays_Sep {
       JOIN civicrm_option_value ov ON cont.contribution_status_id = ov.value AND ov.option_group_id = '
       . CRM_Someoneelsepays_Config::singleton()->getContributionStatusOptionGroupId() . '
       WHERE cont.id = %1 AND ' . $this->_entityIdColumn . ' = %2 AND cont.contact_id != base.contact_id';
-    $queryParams = array(
-      1 => array($contributionId, 'Integer'),
-      2 => array($entityId, 'Integer'),
-    );
+    $queryParams = [
+      1 => [$contributionId, 'Integer'],
+      2 => [$entityId, 'Integer'],
+    ];
     $dao = CRM_Core_DAO::executeQuery($query, $queryParams);
     if ($dao->fetch()) {
       $result = CRM_Someoneelsepays_Utils::moveDaoToArray($dao);
@@ -537,9 +559,7 @@ class CRM_Someoneelsepays_Sep {
    * @param $contributionId
    */
   private function setEntityTypeWithContribution($contributionId) {
-    $queryParams = array(
-      1 => array($contributionId, 'Integer'),
-    );
+    $queryParams = [1 => [$contributionId, 'Integer']];
     $query = 'SELECT COUNT(*) FROM civicrm_membership_payment WHERE contribution_id = %1';
     $countMembership = CRM_Core_DAO::singleValueQuery($query, $queryParams);
     if ($countMembership > 0) {
@@ -569,7 +589,7 @@ class CRM_Someoneelsepays_Sep {
     else {
       $this->setDaoStuffWithType($entityType);
     }
-    $result = array();
+    $result = [];
     $query = 'SELECT cont.contact_id as payer_id, payer.display_name AS payer_display_name, 
       base.contact_id AS beneficiary_id, bene.display_name AS beneficiary_display_name,
       "' . $entityType . '" AS entity_type, pay.' . $this->_entityIdColumn . ' AS entity_id, cont.id AS contribution_id,
@@ -583,9 +603,7 @@ class CRM_Someoneelsepays_Sep {
       JOIN civicrm_option_value ov ON cont.contribution_status_id = ov.value AND ov.option_group_id = '
       . CRM_Someoneelsepays_Config::singleton()->getContributionStatusOptionGroupId() . '
       WHERE pay.' . $this->_entityIdColumn . ' = %1 AND cont.contact_id != base.contact_id';
-    $queryParams = array(
-      1 => array($entityId, 'Integer'),
-    );
+    $queryParams = [1 => [$entityId, 'Integer']];
     $dao = CRM_Core_DAO::executeQuery($query, $queryParams);
     if ($dao->fetch()) {
       $result = CRM_Someoneelsepays_Utils::moveDaoToArray($dao);

@@ -3,6 +3,16 @@
 require_once 'someoneelsepays.civix.php';
 use CRM_Someoneelsepays_ExtensionUtil as E;
 
+
+/**
+ * Implements post().
+ *
+ * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_post/
+ */
+function someoneelsepays_civicrm_post($op, $objectName, $objectId, &$objectRef) {
+  CRM_Someoneelsepays_Sep::post($op, $objectName, $objectId, $objectRef);
+}
+
 /**
  * Implements hook_civicrm_buildForm().
  *

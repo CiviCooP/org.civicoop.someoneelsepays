@@ -17,7 +17,7 @@ class CRM_Someoneelsepays_Upgrader extends CRM_Someoneelsepays_Upgrader_Base {
     $params = array(
       'option_group_id' => 'soft_credit_type',
       'name' => 'sep_default_soft_credit_type',
-      'label' => ts('Someone Else Pays - system only, do not use!'),
+      'label' => ts('Invoice paid by'),
       'is_active' => 1,
       'is_reserved' => 1,
     );
