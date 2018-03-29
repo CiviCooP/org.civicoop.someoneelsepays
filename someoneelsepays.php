@@ -31,6 +31,17 @@ function someoneelsepays_civicrm_postProcess($formName, &$form) {
   CRM_Someoneelsepays_Sep::postProcess($formName, $form);
 }
 
+/**
+ * Implements hook_civicrm_fieldOptions().
+ *
+ * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_fieldOptions/
+ */
+function someoneelsepays_civicrm_fieldOptions($entity, $field, &$options, $params) {
+  if (!class_exists(' CRM_Someoneelsepays_Sep')) {
+    require_once 'CRM/Someoneelsepays/Sep.php';
+  }
+  CRM_Someoneelsepays_Sep::fieldOptions($entity, $field, $options, $params);
+}
 
 /**
  * Implements hook_civicrm_config().

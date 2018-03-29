@@ -30,7 +30,7 @@ class CRM_Someoneelsepays_Config {
     }
     try {
       $this->_sepSoftCreditTypeId = civicrm_api3('OptionValue', 'getvalue', array(
-        'option_gorup_id' => 'soft_credit_type',
+        'option_group_id' => 'soft_credit_type',
         'name' => 'sep_default_soft_credit_type',
         'return' => 'value',
       ));

@@ -266,6 +266,26 @@ class CRM_Someoneelsepays_Sep {
   }
 
   /**
+   * Method to process the civicrm fieldOptions hook
+   *
+   * @param $entity
+   * @param $field
+   * @param $options
+   * @param $params
+   */
+  public static function fieldOptions($entity, $field, &$options, &$params) {
+    if ($entity == 'ContributionSoft' && $field == 'soft_credit_type_id') {
+      if ($params['entity'] == 'contribution_soft') {
+        foreach ($options as $optionValue => $optionLabel) {
+          if ($optionValue == CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId()) {
+            unset($options[$optionValue]);
+          }
+        }
+      }
+    }
+  }
+
+  /**
    * Method to process the civicrm postProcess hook
    *
    * @param $formName
@@ -294,7 +314,6 @@ class CRM_Someoneelsepays_Sep {
    * @param $objectRef
    */
   public static function post($op, $objectName, $objectId, $objectRef) {
-    CRM_Core_Error::debug('user context', $session->readUserContext());
     switch ($objectName) {
       case 'MembershipPayment':
         if ($op == 'create') {
