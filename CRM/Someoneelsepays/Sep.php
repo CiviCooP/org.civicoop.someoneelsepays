@@ -315,6 +315,17 @@ class CRM_Someoneelsepays_Sep {
    */
   public static function post($op, $objectName, $objectId, $objectRef) {
     switch ($objectName) {
+      case 'LineItem':
+        if ($op == 'create') {
+          // update line item if membership
+          if ($objectRef->entity_table == 'civicrm_membership') {
+            $sep = new CRM_Someoneelsepays_Sep('membership');
+            if ($sep->isSepOnLineLineItem($objectRef->contribution_id)) {
+              $sep->updateLineItemLabel($objectRef->contribution_id, $objectRef->entity_id);
+            }
+          }
+        }
+        break;
       case 'MembershipPayment':
         if ($op == 'create') {
           $sep = new CRM_Someoneelsepays_Sep('membership');
@@ -327,7 +338,7 @@ class CRM_Someoneelsepays_Sep {
                 1 => [$objectRef->contribution_id, 'Integer'],
                 2 => [CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId(), 'Integer'],
               ]);
-              $sep->updateLineItemLabel($objectRef->contribution_id);
+              $sep->updateLineItemLabel($objectRef->contribution_id, $objectRef->membership_id);
               $sep->updateContributionSource($objectRef->contribution_id);
             }
             else {
@@ -410,22 +421,50 @@ class CRM_Someoneelsepays_Sep {
    * Method to update the label of the line item
    *
    * @param $contributionId
+   * @param $entityId
    */
-  private function updateLineItemLabel($contributionId) {
-    $lineItemQuery = "SELECT label FROM civicrm_line_item WHERE contribution_id = %1";
-    $currentLabel = CRM_Core_DAO::singleValueQuery($lineItemQuery, [1 => [$contributionId, 'Integer']]);
-    $nameQuery = "SELECT contact.display_name 
-    FROM " . $this->_entityTable . " ent
-    JOIN " . $this->_baseTable . " base ON ent. " . $this->_entityIdColumn . " = base.id 
-    JOIN civicrm_contact contact ON base.contact_id = contact.id
-    WHERE ent.contribution_id = %1";
-    $displayName = CRM_Core_DAO::singleValueQuery($nameQuery, [1 => [$contributionId, 'Integer']]);
-    $currentLabel .= ts(' (on behalf of ') . $displayName . ')';
+  private function updateLineItemLabel($contributionId, $entityId) {
+    $currentLabel = $this->constructLineItemLabel($entityId);
     $update = "UPDATE civicrm_line_item SET label = %1 WHERE contribution_id = %2";
     CRM_Core_DAO::executeQuery($update, [
       1 => [$currentLabel, 'String'],
       2 => [$contributionId, 'Integer'],
     ]);
+  }
+
+  /**
+   * Method to construct the line item label
+   *
+   * @param $entityId
+   * @return bool|null|string
+   */
+  private function constructLineItemLabel($entityId) {
+    $label = NULL;
+    switch ($this->_entityType) {
+      case 'membership':
+        $entityQuery = "SELECT mtype.name AS membership_type
+          FROM civicrm_membership mbr
+          JOIN civicrm_membership_type mtype ON mbr.membership_type_id = mtype.id
+          WHERE mbr.id = %1";
+        $label = CRM_Core_DAO::singleValueQuery($entityQuery, [1 => [$entityId, 'Integer']]);
+        break;
+
+      case 'participant':
+        $entityQuery = "SELECT event.title FROM civicrm_participant part
+          JOIN civicrm_event event ON part.event_id = event.id WHERE part.id = %1";
+        $label = CRM_Core_DAO::singleValueQuery($entityQuery, [1 => [$entityId, 'Integer']]);
+        break;
+    }
+    if ($label) {
+      $nameQuery = "SELECT contact.display_name 
+        FROM " . $this->_entityTable . " ent
+        JOIN " . $this->_baseTable . " base ON ent. " . $this->_entityIdColumn . " = base.id 
+        JOIN civicrm_contact contact ON base.contact_id = contact.id
+        WHERE base.id = %1";
+      $displayName = CRM_Core_DAO::singleValueQuery($nameQuery, [1 => [$entityId, 'Integer']]);
+      return $label . ' (' . ts('on behalf of ') . $displayName . ')';
+    }
+    return FALSE;
   }
 
   /**
@@ -653,5 +692,24 @@ class CRM_Someoneelsepays_Sep {
     $this->_entityTable = 'civicrm_' . strtolower($entityType) . '_payment';
     $this->_baseTable = 'civicrm_' . strtolower($entityType);
     $this->_entityIdColumn = strtolower($entityType) . '_id';
+  }
+
+  /**
+   * Method to check if a line item is a SEP one and not updated yet (necessary for online forms where the
+   * line item is not updated via the online functionality)
+   *
+   * @param $contributionId
+   * @return bool
+   */
+  private function isSepOnLineLineItem($contributionId) {
+    try {
+      $sepCount = civicrm_api3('Sep', 'getcount', ['contribution_id' => $contributionId]);
+      if ($sepCount > 0) {
+        return TRUE;
+      }
+    }
+    catch (CiviCRM_API3_Exception $ex) {
+    }
+    return FALSE;
   }
 }
