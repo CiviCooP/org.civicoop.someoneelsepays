@@ -275,7 +275,7 @@ class CRM_Someoneelsepays_Sep {
    */
   public static function fieldOptions($entity, $field, &$options, &$params) {
     if ($entity == 'ContributionSoft' && $field == 'soft_credit_type_id') {
-      if ($params['entity'] == 'contribution_soft') {
+      if ($params['entity'] == 'contribution_soft' && $params['context'] == 'create') {
         foreach ($options as $optionValue => $optionLabel) {
           if ($optionValue == CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId()) {
             unset($options[$optionValue]);
@@ -337,7 +337,6 @@ class CRM_Someoneelsepays_Sep {
         }
         break;
     }
-    //todo update line item in post -> when SEP
   }
 
   /**
@@ -478,6 +477,7 @@ class CRM_Someoneelsepays_Sep {
             'api' => ['params' => ['is_deceased' => 0]],
           ]);
           $form->setDefaults(['sep_payer_id' => $sepData['payer_id']]);
+          $form->setDefaults(['soft_credit_type_id' => CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId()]);
           CRM_Core_Region::instance('page-body')->add([
             'template' => 'SepEdit.tpl']);
         }
@@ -654,5 +654,4 @@ class CRM_Someoneelsepays_Sep {
     $this->_baseTable = 'civicrm_' . strtolower($entityType);
     $this->_entityIdColumn = strtolower($entityType) . '_id';
   }
-
 }
