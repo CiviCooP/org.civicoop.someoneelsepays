@@ -23,6 +23,9 @@
  | see the CiviCRM license FAQ at http://civicrm.org/licensing        |
  +--------------------------------------------------------------------+
 *}
+{* Someone Else Pays - this template is present so we can try to replace the core
+   EventFees.tpl using the alterTemplate hook in the next release *}
+
 {assign var=isRecordPayment value=1 }
 {if $paid} {* We retrieve this tpl when event is selected - keep it empty if event is not paid *}
 

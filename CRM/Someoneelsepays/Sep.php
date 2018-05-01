@@ -288,10 +288,12 @@ class CRM_Someoneelsepays_Sep {
    */
   public static function fieldOptions($entity, $field, &$options, &$params) {
     if ($entity == 'ContributionSoft' && $field == 'soft_credit_type_id') {
-      if ($params['entity'] == 'contribution_soft' && $params['context'] == 'create') {
-        foreach ($options as $optionValue => $optionLabel) {
-          if ($optionValue == CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId()) {
-            unset($options[$optionValue]);
+      if (isset($params['entity']) && $params['entity'] == 'contribution_soft') {
+        if ($params['context'] == 'create') {
+          foreach ($options as $optionValue => $optionLabel) {
+            if ($optionValue == CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId()) {
+              unset($options[$optionValue]);
+            }
           }
         }
       }
