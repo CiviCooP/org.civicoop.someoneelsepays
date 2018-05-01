@@ -15,11 +15,11 @@ The extension contains the following changes:
 * a new API _Sep_ with the actions _get_ and _create_. This will allow organizations that create their own forms to process and retrieve other payers using this API.
 * it introduces a soft credit type _send invoice to_ (required for the membership processing). This soft credit type is automatically used in the processing, but is not present in the UI for soft credit types in the contribution forms.
  
-![Screenshot](soft_credit_type.png)
+![Screenshot](/images/soft_credit_type.png)
 
-* although it does generate a soft credit (record in _civicrm_contribution_soft_) for the membership payment, this is immediately and automatically deleted at the end of the membership payment processing.
+* a little techno talk: although it does generate a soft credit (record in _civicrm_contribution_soft_) of the special soft credit type _send invoice to_ during the processing of the membership payment if there is another contact paying, the record is automatically deleted at the en of the membership payment processing.
 * in the membership edit and add form within the CiviCRM UI, it is no longer possible to add a soft credit type but possible to select another payer.
-* it is possible to include a _send invoice to_ honor section for the online membership page configured within the CiviCRM UI.
+* for online membership pages: it is possible to include a _send invoice to_ honor section for the online membership page configured within the CiviCRM UI.
 * when viewing a membership, a tab _Someone Else Pays_ is added to the page if another contact pays for the membership. 
 
 ![Screenshot](/images/membership_view.png)
