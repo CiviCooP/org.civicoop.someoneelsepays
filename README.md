@@ -32,6 +32,8 @@ The extension contains the following changes:
 
 ![Screenshot](/images/participant_view.png)
 
+There are **NO** changes for the online registration pages for events. The funder of the extension uses Webform CiviCRM for registration pages, so they do not need the event registration. If any party wants to fund changes that would allow the event registration pages to allow Someone Else Pays (with predefined custom fields probably), drop me a mail (erik dot hommel at civicoop dot org).
+
 The extension is licensed under [AGPL-3.0](LICENSE.txt).
 
 ## Requirements
