@@ -65,11 +65,12 @@ class CRM_Someoneelsepays_Sep {
    *
    * @param int $entityId
    * @param int $payerId
+   * @return int $contributionId
    */
   private function moveContribution($entityId, $payerId) {
-    // get entity payment contribution_id
+    // get entity payment contribution_id if not passed
     $entityQuery = 'SELECT contribution_id FROM ' . $this->_entityTable . ' WHERE ' . $this->_entityIdColumn . ' = %1';
-    $contributionId = (int) CRM_Core_DAO::singleValueQuery($entityQuery, [
+    $contributionId = (int)CRM_Core_DAO::singleValueQuery($entityQuery, [
       1 => [$entityId, 'Integer'],
     ]);
     // move contribution
@@ -78,6 +79,7 @@ class CRM_Someoneelsepays_Sep {
       1 => [$payerId, 'Integer'],
       2 => [$contributionId, 'Integer'],
     ]);
+    return $contributionId;
   }
 
   /**
@@ -256,12 +258,23 @@ class CRM_Someoneelsepays_Sep {
   public static function buildForm($formName, &$form) {
     switch ($formName) {
       case 'CRM_Member_Form_MembershipView':
-        self::addToMembershipView($form);
+        self::addToView('membership', $form);
+        break;
+
+      case 'CRM_Event_Form_ParticipantView':
+        self::addToView('participant', $form);
         break;
 
       case 'CRM_Member_Form_Membership':
         self::addToMembership($form);
         break;
+
+      case 'CRM_Event_Form_Participant':
+        // todo check if I can do this with alterTemplate hook?
+        // todo wrapper at the end of event fees
+        self::addToParticipant($form);
+        break;
+
     }
   }
 
@@ -297,17 +310,116 @@ class CRM_Someoneelsepays_Sep {
         $formAction = $form->getVar('_action');
           // if edit, update contribution contact_id if required
           if ($formAction == CRM_Core_Action::UPDATE) {
+            $defaultValues = $form->getVar('_defaultValues');
+            $submitValues = $form->getVar('_submitValues');
             $membershipId = $form->getVar('_id');
             $sep = new CRM_Someoneelsepays_Sep('membership');
-            $submitValues = $form->getVar('_submitValues');
-            $sep->updateContributionContact($membershipId, $submitValues['sep_payer_id']);
+            // todo also cater for different situations (based on sep_payer_id)
+            $sep->processMembershipUpdate($membershipId, $defaultValues, $submitValues);
           }
         break;
+      case 'CRM_Event_Form_Participant':
+        $formAction = $form->getVar('_action');
+        $participantId = $form->getVar('_id');
+        $submitValues = $form->getVar('_submitValues');
+        switch ($formAction) {
+          // if add or edit and sep_flag, update contribution contact_id
+          case CRM_Core_Action::ADD:
+            if ($submitValues['sep_flag'] == 1) {
+              $sep = new CRM_Someoneelsepays_Sep('participant');
+              $sep->updateContributionContact($participantId, $submitValues['sep_payer_id']);
+            }
+            break;
+
+          case CRM_Core_Action::UPDATE:
+            $defaultValues = $form->getVar('_defaultValues');
+            self::processParticipantUpdate($participantId, $defaultValues, $submitValues);
+            break;
+
+        }
+    }
+  }
+
+  /**
+   * Method to possibly process participant update
+   *
+   * @param int $participantId
+   * @param array $oldValues
+   * @param array $newValues
+   */
+  private static function processParticipantUpdate($participantId, $oldValues, $newValues) {
+    // if previously no sep and now sep -> contribution contact is new payer
+    if (!isset($oldValues['sep_flag']) || $oldValues['sep_flag'] == 0) {
+      if (isset($newValues['sep_flag']) && $newValues['sep_flag'] == 1) {
+        $sep = new CRM_Someoneelsepays_Sep('participant');
+        $sep->updateContributionContact($participantId, $newValues['sep_payer_id']);
+        return;
+      }
+    }
+    // if previously sep ...
+    if (isset($oldValues['sep_flag']) && $oldValues['sep_flag'] == 1) {
+      //.. and no sep now
+      if (!isset($newValues['sep_flag']) || $newValues['sep_flag'] == 0) {
+        if (isset($oldValues['participant_contact_id'])) {
+          $sep = new CRM_Someoneelsepays_Sep('participant');
+          $sep->updateContributionContact($participantId, $oldValues['participant_contact_id']);
+          $sep->resetLineItemLabel($participantId);
+        }
+        else {
+          CRM_Core_Error::debug_log_message('Could not find a participant contact id when trying to update contribution contact in ' . __METHOD__);
+        }
+        return;
+      }
+      // ... and sep now, check if payer is different
+      if (isset($newValues['sep_flag']) && $newValues['sep_flag'] == 1) {
+        if ($oldValues['sep_payer_id'] != $newValues['sep_payer_id']) {
+          $sep = new CRM_Someoneelsepays_Sep('participant');
+          $sep->updateContributionContact($participantId, $newValues['sep_payer_id']);
+          return;
+        }
+      }
+    }
+  }
+
+  /**
+   * Method to possibly process membership update
+   *
+   * @param int $membershipId
+   * @param array $oldValues
+   * @param array $newValues
+   */
+  private static function processMembershipUpdate($membershipId, $oldValues, $newValues) {
+    // if previously no sep and now sep -> contribution contact is new payer
+    if (!isset($oldValues['sep_payer_id']) || empty($oldValues['sep_payer_id'])) {
+      if (isset($newValues['sep_payer_id']) && !empty($newValues['sep_payer_id'])) {
+        $sep = new CRM_Someoneelsepays_Sep('membership');
+        $sep->updateContributionContact($membershipId, $newValues['sep_payer_id']);
+        return;
+      }
+    }
+    // if previously sep ...
+    if (isset($oldValues['sep_payer_id']) && !empty($oldValues['sep_payer_id'])) {
+      //.. and no sep now
+      if (!isset($newValues['sep_payer_id']) || empty($newValues['sep_payer_id'])) {
+        $sep = new CRM_Someoneelsepays_Sep('membership');
+        $sep->updateContributionContact($membershipId, $oldValues['sep_payer_id']);
+        $sep->resetLineItemLabel($membershipId);
+        return;
+      }
+      // ... and sep now, check if payer is different
+      if (isset($newValues['sep_payer_id']) && !empty($newValues['sep_payer_id'])) {
+        if ($oldValues['sep_payer_id'] != $newValues['sep_payer_id']) {
+          $sep = new CRM_Someoneelsepays_Sep('membership');
+          $sep->updateContributionContact($membershipId, $newValues['sep_payer_id']);
+          return;
+        }
+      }
     }
   }
 
   /**
    * Method to process new membership payments or participant payment
+   *
    * @param $op
    * @param $objectName
    * @param $objectId
@@ -317,9 +429,11 @@ class CRM_Someoneelsepays_Sep {
     switch ($objectName) {
       case 'LineItem':
         if ($op == 'create') {
-          // update line item if membership
+          // update line item if membership (participant is done in postProcess as contribution is still on beneficiary
+          // when line item created)
           if ($objectRef->entity_table == 'civicrm_membership') {
-            $sep = new CRM_Someoneelsepays_Sep('membership');
+            $entityType = str_replace('civicrm_', '', $objectRef->entity_table);
+            $sep = new CRM_Someoneelsepays_Sep($entityType);
             if ($sep->isSepOnLineLineItem($objectRef->contribution_id)) {
               $sep->updateLineItemLabel($objectRef->contribution_id, $objectRef->entity_id);
             }
@@ -424,10 +538,10 @@ class CRM_Someoneelsepays_Sep {
    * @param $entityId
    */
   private function updateLineItemLabel($contributionId, $entityId) {
-    $currentLabel = $this->constructLineItemLabel($entityId);
+    $newLabel = $this->constructLineItemLabel($entityId);
     $update = "UPDATE civicrm_line_item SET label = %1 WHERE contribution_id = %2";
     CRM_Core_DAO::executeQuery($update, [
-      1 => [$currentLabel, 'String'],
+      1 => [$newLabel, 'String'],
       2 => [$contributionId, 'Integer'],
     ]);
   }
@@ -439,36 +553,51 @@ class CRM_Someoneelsepays_Sep {
    * @return bool|null|string
    */
   private function constructLineItemLabel($entityId) {
-    $label = NULL;
-    switch ($this->_entityType) {
-      case 'membership':
-        $entityQuery = "SELECT mtype.name AS membership_type
-          FROM civicrm_membership mbr
-          JOIN civicrm_membership_type mtype ON mbr.membership_type_id = mtype.id
-          WHERE mbr.id = %1";
-        $label = CRM_Core_DAO::singleValueQuery($entityQuery, [1 => [$entityId, 'Integer']]);
-        break;
-
-      case 'participant':
-        $entityQuery = "SELECT event.title FROM civicrm_participant part
-          JOIN civicrm_event event ON part.event_id = event.id WHERE part.id = %1";
-        $label = CRM_Core_DAO::singleValueQuery($entityQuery, [1 => [$entityId, 'Integer']]);
-        break;
-    }
-    if ($label) {
-      $nameQuery = "SELECT contact.display_name 
-        FROM " . $this->_entityTable . " ent
-        JOIN " . $this->_baseTable . " base ON ent. " . $this->_entityIdColumn . " = base.id 
-        JOIN civicrm_contact contact ON base.contact_id = contact.id
-        WHERE base.id = %1";
-      $displayName = CRM_Core_DAO::singleValueQuery($nameQuery, [1 => [$entityId, 'Integer']]);
-      return $label . ' (' . ts('on behalf of ') . $displayName . ')';
+    $entityQuery = "SELECT fv.label AS price_label, cc.display_name
+      FROM civicrm_line_item AS li
+      JOIN civicrm_price_field_value AS fv ON li.price_field_value_id = fv.id
+      JOIN " . $this->_baseTable . " AS base ON base.id = li.entity_id
+      JOIN civicrm_contact AS cc ON base.contact_id = cc.id      
+      WHERE li.entity_table = %1 AND li.entity_id = %2";
+    $dao = CRM_Core_DAO::executeQuery($entityQuery, [
+      1 => [$this->_baseTable, 'String'],
+      2 => [$entityId, 'Integer'],
+    ]);
+    if ($dao->fetch()) {
+      return $dao->price_label . ' (' . ts('on behalf of ')
+        . $dao->display_name . ')';
     }
     return FALSE;
   }
 
   /**
+   * Method to reset the line item label to its original value
+   *
+   * @param $entityId
+   * @return bool|null|string
+   */
+  private function resetLineItemLabel($entityId) {
+    $entityQuery = "SELECT li.id AS line_item_id, fv.label AS price_label
+      FROM civicrm_line_item AS li
+      JOIN civicrm_price_field AS pf ON li.price_field_id = pf.id
+      JOIN civicrm_price_field_value AS fv ON li.price_field_value_id = fv.id
+      WHERE li.entity_table = %1 AND li.entity_id = %2";
+    $dao = CRM_Core_DAO::executeQuery($entityQuery, [
+      1 => [$this->_baseTable, 'String'],
+      2 => [$entityId, 'Integer'],
+    ]);
+    if ($dao->fetch()) {
+      $updateQuery = "UPDATE civicrm_line_item SET label = %1 WHERE id = %2";
+      CRM_Core_DAO::executeQuery($updateQuery, [
+        1 => [$dao->price_label, 'String'],
+        2 => [$dao->line_item_id, 'Integer'],
+      ]);
+    }
+  }
+
+  /**
    * Method to update the contribution contact
+   *
    * Don't ask....contribution is attached to different contact when coming from UI or from
    * online membership page. So figuring out where it is coming from based on request values
    *
@@ -476,25 +605,36 @@ class CRM_Someoneelsepays_Sep {
    * @param int $payerId
    */
   private function updateContributionContact($entityId, $payerId) {
-    // when coming from UI, contribution is already on payer so only update if from online membership page
-    $requestValues = CRM_Utils_Request::exportValues();
-    if (isset($requestValues['honor'])) {
-      // replace with entity contact if payer is empty
-      if (empty($payerId)) {
-        try {
-          $payerId = civicrm_api3(ucfirst($this->_entityType), 'getvalue', [
-            'id' => $entityId,
-            'return' => 'contact_id',
-          ]);
-        } catch (CiviCRM_API3_Exception $ex) {
-          CRM_Core_Error::debug_log_message(ts('Could not find contact_id for ' . $this->_entityType
-              . 'with id ') . $entityId . ts(' with API ' . ucfirst($this->_entityType) . ' getvalue in ')
-            . __METHOD__ . ' (extension org.civicoop.someoneelsepays)');
+    switch ($this->_entityType) {
+      case 'membership':
+        // when coming from UI, contribution is already on payer so only update if from online membership page
+        $requestValues = CRM_Utils_Request::exportValues();
+        if (isset($requestValues['honor'])) {
+          // replace with entity contact if payer is empty
+          if (empty($payerId)) {
+            try {
+              $payerId = civicrm_api3(ucfirst($this->_entityType), 'getvalue', [
+                'id' => $entityId,
+                'return' => 'contact_id',
+              ]);
+            } catch (CiviCRM_API3_Exception $ex) {
+              CRM_Core_Error::debug_log_message(ts('Could not find contact_id for ' . $this->_entityType
+                  . 'with id ') . $entityId . ts(' with API ' . ucfirst($this->_entityType) . ' getvalue in ')
+                . __METHOD__ . ' (extension org.civicoop.someoneelsepays)');
+            }
+          }
+          if (!empty($payerId)) {
+            $this->moveContribution($entityId, $payerId);
+          }
         }
-      }
-      if (!empty($payerId)) {
-        $this->moveContribution($entityId, $payerId);
-      }
+        break;
+
+      case 'participant':
+        if (!empty($payerId)) {
+          $contributionId = $this->moveContribution($entityId, $payerId);
+          $this->updateLineItemLabel($contributionId, $entityId);
+        }
+        break;
     }
   }
 
@@ -518,13 +658,41 @@ class CRM_Someoneelsepays_Sep {
           $form->setDefaults(['sep_payer_id' => $sepData['payer_id']]);
           $form->setDefaults(['soft_credit_type_id' => CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId()]);
           CRM_Core_Region::instance('page-body')->add([
-            'template' => 'SepEdit.tpl']);
+            'template' => 'SepMembershipEdit.tpl']);
         }
         break;
 
       case CRM_Core_Action::ADD:
         $form->setDefaults(['soft_credit_type_id' => CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId()]);
-        CRM_Core_Region::instance('page-body')->add(['template' => 'SepAdd.tpl']);
+        CRM_Core_Region::instance('page-body')->add(['template' => 'SepMembershipAdd.tpl']);
+        break;
+    }
+  }
+
+  /**
+   * Method to add sep details to participant form if required
+   *
+   * @param $form
+   */
+  private static function addToParticipant(&$form) {
+    $formAction = $form->getVar('_action');
+    $form->addEntityRef('sep_payer_id', ts('Select Contact to Change Payer'), [
+      'api' => ['params' => ['is_deceased' => 0]],
+    ]);
+    $form->addYesNo('sep_flag', ts('Someone Else Pays?'), FALSE);
+    switch ($formAction) {
+      case CRM_Core_Action::UPDATE:
+        $participantId = $form->getVar('_id');
+        $sep = new CRM_Someoneelsepays_Sep('participant');
+        $sepData = $sep->getSepDetailsWithEntity($participantId, 'participant');
+        if ($sepData) {
+          $form->setDefaults(['sep_payer_id' => $sepData['payer_id']]);
+          $form->setDefaults(['sep_flag' => 1]);
+        }
+        break;
+
+      case CRM_Core_Action::ADD:
+        $form->setDefaults(['sep_flag' => 0]);
         break;
     }
   }
@@ -532,13 +700,28 @@ class CRM_Someoneelsepays_Sep {
   /**
    * Method to add sep details to membership view form if required
    *
+   * @param $entityType
    * @param $form
    */
-  private static function addToMembershipView(&$form) {
-    $membershipId = CRM_Someoneelsepays_Utils::getIdFromRequest();
-    $sep = new CRM_Someoneelsepays_Sep('membership');
-    $sepData = $sep->getSepDetailsWithEntity($membershipId, 'membership');
+  private static function addToView($entityType, &$form) {
+    $entityId = CRM_Someoneelsepays_Utils::getIdFromRequest();
+    $sep = new CRM_Someoneelsepays_Sep($entityType);
+    $sepData = $sep->getSepDetailsWithEntity($entityId, $entityType);
     if ($sepData) {
+      switch ($entityType) {
+        case 'membership':
+          $userContext = CRM_Utils_System::url('civicrm/contact/view/membership' , 'reset=1&force=1&cid=' . $sepData['beneficiary_id'], TRUE);
+          break;
+        case 'participant':
+          $userContext = CRM_Utils_System::url('civicrm/contact/view/participant', 'reset=1&force=1&cid=' . $sepData['beneficiary_id'], TRUE);
+          break;
+        default:
+          $userContext = NULL;
+          break;
+      }
+      if ($userContext) {
+        CRM_Core_Session::singleton()->pushUserContext($userContext);
+      }
       $viewUrl = CRM_Utils_System::url('civicrm/contact/view/contribution', 'reset=1&id='
         . $sepData['contribution_id'] . '&cid=' . $sepData['payer_id'] . '&action=view&context=contribution', TRUE);
       $editUrl = CRM_Utils_System::url('civicrm/contact/view/contribution', 'reset=1&action=update&id='
