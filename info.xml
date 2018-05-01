@@ -6,9 +6,7 @@
     <license>AGPL-3.0</license>
     <maintainer>
         <author>Erik Hommel (CiviCooP)</author>
-        <author>Klaas Eikelboom (CIviCooP)</author>0
         <email>erik.hommel@civicoop.org</email>
-        <email>klaas.eikelboom@civicoop.org</email>
     </maintainer>
     <urls>
         <url desc="Main Extension Page">https://github.com/CiviCooP/org.civicoop.someoneelsepays</url>
@@ -18,11 +16,11 @@
     </urls>
     <releaseDate>2018-01-31</releaseDate>
     <version>1.0</version>
-    <develStage>alpha</develStage>
+    <develStage>beta</develStage>
     <compatibility>
         <ver>4.7</ver>
     </compatibility>
-    <comments>Extension is being developed</comments>
+    <comments>Extension is being tested</comments>
     <civix>
         <namespace>CRM/Someoneelsepays</namespace>
     </civix>
