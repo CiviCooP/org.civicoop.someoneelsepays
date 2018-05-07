@@ -283,7 +283,7 @@
 
 {*JQuery for SomeoneElse Pays *}
 <script>
-  {if $form.sep_flag ne 1}
+  {if $form.sep_flag.value ne 1}
     {literal}
       cj('.crm-eventfees-form-block-sep_payer_id').hide();
     {/literal}
