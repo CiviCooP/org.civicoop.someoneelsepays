@@ -316,7 +316,6 @@ class CRM_Someoneelsepays_Sep {
             $submitValues = $form->getVar('_submitValues');
             $membershipId = $form->getVar('_id');
             $sep = new CRM_Someoneelsepays_Sep('membership');
-            // todo also cater for different situations (based on sep_payer_id)
             $sep->processMembershipUpdate($membershipId, $defaultValues, $submitValues);
           }
         break;
@@ -330,6 +329,11 @@ class CRM_Someoneelsepays_Sep {
             if ($submitValues['sep_flag'] == 1) {
               $sep = new CRM_Someoneelsepays_Sep('participant');
               $sep->updateContributionContact($participantId, $submitValues['sep_payer_id']);
+              $query = "SELECT contribution_id FROM civicrm_participant_payment WHERE participant_id = %1 LIMIT 1";
+              $contributionId = CRM_Core_DAO::singleValueQuery($query, [1 => [$participantId, 'Integer']]);
+              if ($contributionId) {
+                $sep->updateContributionSource($contributionId);
+              }
             }
             break;
 
@@ -456,8 +460,7 @@ class CRM_Someoneelsepays_Sep {
               ]);
               $sep->updateLineItemLabel($objectRef->contribution_id, $objectRef->membership_id);
               $sep->updateContributionSource($objectRef->contribution_id);
-            }
-            else {
+            } else {
               CRM_Core_Error::debug_log_message(ts('Did not find an SEP soft credit unexpectedly in ' . __METHOD__));
             }
           }
