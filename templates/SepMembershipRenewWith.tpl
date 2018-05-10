@@ -38,7 +38,8 @@
 {literal}
     <script type="text/javascript">
         cj(cj('#sep_edit').html()).insertBefore('#customData');
-        cj('#contri').remove();
+        cj('.crm-membershiprenew-form-block-contribution-contact').remove();
+        //cj('#is_different_contribution_contact').remove();
         cj('#sep_edit').remove();
     </script>
 {/literal}

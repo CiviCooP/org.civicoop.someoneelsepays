@@ -68,8 +68,9 @@ class CRM_Someoneelsepays_Sep {
    * @return int $contributionId
    */
   private function moveContribution($entityId, $payerId) {
-    // get entity payment contribution_id if not passed
-    $entityQuery = 'SELECT contribution_id FROM ' . $this->_entityTable . ' WHERE ' . $this->_entityIdColumn . ' = %1';
+    // get latest entity payment contribution_id if not passed
+    $entityQuery = 'SELECT contribution_id FROM ' . $this->_entityTable . ' WHERE ' . $this->_entityIdColumn
+      . ' = %1 ORDER BY contribution_id DESC LIMIT 1';
     $contributionId = (int)CRM_Core_DAO::singleValueQuery($entityQuery, [
       1 => [$entityId, 'Integer'],
     ]);
@@ -269,6 +270,10 @@ class CRM_Someoneelsepays_Sep {
         self::addToMembership($form);
         break;
 
+      case 'CRM_Member_Form_MembershipRenewal':
+        self::addToMembershipRenewal($form);
+        break;
+
       case 'CRM_Event_Form_Participant':
         // todo check if I can do this with alterTemplate hook?
         // todo wrapper at the end of event fees
@@ -317,6 +322,17 @@ class CRM_Someoneelsepays_Sep {
             $membershipId = $form->getVar('_id');
             $sep = new CRM_Someoneelsepays_Sep('membership');
             $sep->processMembershipUpdate($membershipId, $defaultValues, $submitValues);
+          }
+        break;
+      case 'CRM_Member_Form_MembershipRenewal':
+        $formAction = $form->getVar('_action');
+          // if renew, update contribution contact_id if required
+          if ($formAction == CRM_Core_Action::RENEW) {
+            $defaultValues = $form->getVar('_defaultValues');
+            $submitValues = $form->getVar('_submitValues');
+            $membershipId = $form->getVar('_id');
+            $sep = new CRM_Someoneelsepays_Sep('membership');
+            $sep->processMembershipRenewal($membershipId, $defaultValues, $submitValues);
           }
         break;
       case 'CRM_Event_Form_Participant':
@@ -419,6 +435,42 @@ class CRM_Someoneelsepays_Sep {
           $sep->updateContributionContact($membershipId, $newValues['sep_payer_id']);
           return;
         }
+      }
+    }
+  }
+
+  /**
+   * Method to possibly process membership renewal
+   *
+   * @param int $membershipId
+   * @param array $oldValues
+   * @param array $newValues
+   */
+  private static function processMembershipRenewal($membershipId, $oldValues, $newValues) {
+    // if previously no sep and now sep -> contribution contact is new payer
+    if (!isset($oldValues['sep_payer_id']) || empty($oldValues['sep_payer_id'])) {
+      if (isset($newValues['sep_payer_id']) && !empty($newValues['sep_payer_id'])) {
+        $sep = new CRM_Someoneelsepays_Sep('membership');
+        $sep->updateContributionContact($membershipId, $newValues['sep_payer_id']);
+        return;
+      }
+    }
+    // if previously sep ...
+    if (isset($oldValues['sep_payer_id']) && !empty($oldValues['sep_payer_id'])) {
+      //.. and no sep now
+      if (!isset($newValues['sep_payer_id']) || empty($newValues['sep_payer_id'])) {
+        $sep = new CRM_Someoneelsepays_Sep('membership');
+        $sep->updateContributionContact($membershipId, $oldValues['sep_payer_id']);
+        $sep->resetLineItemLabel($membershipId);
+        return;
+      }
+      // ... and sep now then move latest contribution
+      if (isset($newValues['sep_payer_id']) && !empty($newValues['sep_payer_id'])) {
+        $sep = new CRM_Someoneelsepays_Sep('membership');
+        $contributionId = $sep->moveContribution($membershipId, $newValues['sep_payer_id']);
+        $sep->updateContributionSource($contributionId);
+        $sep->updateLineItemLabel($contributionId, $membershipId);
+        return;
       }
     }
   }
@@ -666,11 +718,36 @@ class CRM_Someoneelsepays_Sep {
             'template' => 'SepMembershipEdit.tpl']);
         }
         break;
-
       case CRM_Core_Action::ADD:
         $form->setDefaults(['soft_credit_type_id' => CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId()]);
         CRM_Core_Region::instance('page-body')->add(['template' => 'SepMembershipAdd.tpl']);
         break;
+    }  }
+
+  /**
+   * Method to add sep details to membership renewal form if required
+   *
+   * @param $form
+   */
+  private static function addToMembershipRenewal(&$form) {
+    $formAction = $form->getVar('_action');
+    if ($formAction == CRM_Core_Action::RENEW) {
+      $membershipId = $form->getVar('_id');
+      $sep = new CRM_Someoneelsepays_Sep('membership');
+      $sepData = $sep->getSepDetailsWithEntity($membershipId, 'membership');
+      $form->assign('sep_data', $sepData);
+      $form->addEntityRef('sep_payer_id', ts('Select Contact to Change Payer'), [
+        'api' => ['params' => ['is_deceased' => 0]],
+      ]);
+      $form->setDefaults(['soft_credit_type_id' => CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId()]);
+      if (isset($sepData['payer_id']) && !empty($sepData['payer_id'])) {
+        $form->setDefaults(['sep_payer_id' => $sepData['payer_id']]);
+        CRM_Core_Region::instance('page-body')->add([
+          'template' => 'SepMembershipRenewWith.tpl']);
+      }
+      else {
+        CRM_Core_Region::instance('page-body')->add(['template' => 'SepMembershipRenew.tpl']);
+      }
     }
   }
 
@@ -849,6 +926,8 @@ class CRM_Someoneelsepays_Sep {
       $this->setDaoStuffWithType($entityType);
     }
     $result = [];
+    $latestQuery = 'SELECT MAX(contribution_id) FROM ' . $this->_entityTable .' WHERE ' . $this->_entityIdColumn . ' = %1';
+    $latestContributionId = CRM_Core_DAO::singleValueQuery($latestQuery, [1 => [$entityId, 'Integer']]);
     $query = 'SELECT cont.contact_id as payer_id, payer.display_name AS payer_display_name, 
       base.contact_id AS beneficiary_id, bene.display_name AS beneficiary_display_name,
       "' . $entityType . '" AS entity_type, pay.' . $this->_entityIdColumn . ' AS entity_id, cont.id AS contribution_id,
@@ -861,8 +940,11 @@ class CRM_Someoneelsepays_Sep {
       JOIN civicrm_financial_type fin ON cont.financial_type_id = fin.id
       JOIN civicrm_option_value ov ON cont.contribution_status_id = ov.value AND ov.option_group_id = '
       . CRM_Someoneelsepays_Config::singleton()->getContributionStatusOptionGroupId() . '
-      WHERE pay.' . $this->_entityIdColumn . ' = %1 AND cont.contact_id != base.contact_id';
-    $queryParams = [1 => [$entityId, 'Integer']];
+      WHERE pay.' . $this->_entityIdColumn . ' = %1 AND cont.contact_id != base.contact_id AND pay.contribution_id = %2';
+    $queryParams = [
+      1 => [$entityId, 'Integer'],
+      2 => [$latestContributionId, 'Integer'],
+      ];
     $dao = CRM_Core_DAO::executeQuery($query, $queryParams);
     if ($dao->fetch()) {
       $result = CRM_Someoneelsepays_Utils::moveDaoToArray($dao);
