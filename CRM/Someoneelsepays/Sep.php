@@ -928,6 +928,12 @@ class CRM_Someoneelsepays_Sep {
     $result = [];
     $latestQuery = 'SELECT MAX(contribution_id) FROM ' . $this->_entityTable .' WHERE ' . $this->_entityIdColumn . ' = %1';
     $latestContributionId = CRM_Core_DAO::singleValueQuery($latestQuery, [1 => [$entityId, 'Integer']]);
+    
+    // if there is no contribution, the $latestContributionId will be NULL. If the $latestContributionId is NULL the next query will give a error, so we return here NULL
+    if(empty($latestContributionId)){
+        return NULL;
+    }
+    
     $query = 'SELECT cont.contact_id as payer_id, payer.display_name AS payer_display_name, 
       base.contact_id AS beneficiary_id, bene.display_name AS beneficiary_display_name,
       "' . $entityType . '" AS entity_type, pay.' . $this->_entityIdColumn . ' AS entity_id, cont.id AS contribution_id,
