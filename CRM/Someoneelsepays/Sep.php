@@ -579,7 +579,7 @@ class CRM_Someoneelsepays_Sep {
     WHERE ent.contribution_id = %1";
     $displayName = CRM_Core_DAO::singleValueQuery($nameQuery, [1 => [$contributionId, 'Integer']]);
     if ($displayName) {
-      $newSource = $sourceParts[0] . ' (on behalf of ' . $displayName . ')';
+      $newSource = $sourceParts[0] . ts(' (ten name van ') . $displayName . ')';
       $update = "UPDATE civicrm_contribution SET source = %1 WHERE id = %2";
       CRM_Core_DAO::executeQuery($update, [
         1 => [$newSource, 'String'],
@@ -621,7 +621,7 @@ class CRM_Someoneelsepays_Sep {
       2 => [$entityId, 'Integer'],
     ]);
     if ($dao->fetch()) {
-      return $dao->price_label . ' (' . ts('on behalf of ')
+      return $dao->price_label . ' (' . ts('ten name van ')
         . $dao->display_name . ')';
     }
     return FALSE;
