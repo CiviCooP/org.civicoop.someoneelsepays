@@ -292,9 +292,12 @@ class CRM_Someoneelsepays_Sep {
    * @param $params
    */
   public static function fieldOptions($entity, $field, &$options, &$params) {
+    // We want the soft credit option be available on the new membership form
+    // and we hide the field on the form but set a default value.
+    $validUrls = array('civicrm/member/add');
     if ($entity == 'ContributionSoft' && $field == 'soft_credit_type_id') {
       if (isset($params['entity']) && $params['entity'] == 'contribution_soft') {
-        if ($params['context'] == 'create') {
+        if ($params['context'] == 'create' && !in_array(CRM_Utils_System::currentPath(), $validUrls)) {
           foreach ($options as $optionValue => $optionLabel) {
             if ($optionValue == CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId()) {
               unset($options[$optionValue]);
