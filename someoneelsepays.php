@@ -10,7 +10,13 @@ use CRM_Someoneelsepays_ExtensionUtil as E;
  * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_post/
  */
 function someoneelsepays_civicrm_post($op, $objectName, $objectId, &$objectRef) {
-  CRM_Someoneelsepays_Sep::post($op, $objectName, $objectId, $objectRef);
+  $validObjects = [
+    'LineItem',
+    'MembershipPayment',
+    ];
+  if (in_array($objectName, $validObjects)) {
+    CRM_Someoneelsepays_Sep::post($op, $objectName, $objectId, $objectRef);
+  }
 }
 
 /**
@@ -20,6 +26,16 @@ function someoneelsepays_civicrm_post($op, $objectName, $objectId, &$objectRef) 
  */
 function someoneelsepays_civicrm_buildForm($formName, &$form) {
   CRM_Someoneelsepays_Sep::buildForm($formName, $form);
+}
+
+/**
+ * Implements hook_civicrm_validateForm().
+ *
+ * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_validateForm/
+ */
+function someoneelsepays_civicrm_validateForm($formName, &$fields, &$files, &$form, &$errors) {
+  Civi::log()->debug('formName is ' . $formName);
+  CRM_Someoneelsepays_Sep::validateForm($formName, $fields, $files, $form, $errors);
 }
 
 /**

@@ -44,4 +44,24 @@ class CRM_Someoneelsepays_Utils {
     return $columns;
   }
 
+  /**
+   * Method to check if SEP extension is active
+   *
+   * @return bool
+   */
+  public static function isSepInstalledAndActive() {
+    try {
+      $sepStatus = civicrm_api3('Extension', 'getvalue', [
+        'return' => "status",
+        'full_name' => "org.civicoop.someoneelsepays",
+      ]);
+      if (strtolower($sepStatus) == 'installed') {
+        return TRUE;
+      }
+    }
+    catch (CiviCRM_API3_Exception $ex) {
+    }
+    return FALSE;
+  }
+
 }

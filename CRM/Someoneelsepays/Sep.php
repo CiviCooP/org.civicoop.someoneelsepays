@@ -275,11 +275,33 @@ class CRM_Someoneelsepays_Sep {
         break;
 
       case 'CRM_Event_Form_Participant':
-        // todo check if I can do this with alterTemplate hook?
-        // todo wrapper at the end of event fees
         self::addToParticipant($form);
         break;
 
+    }
+  }
+
+  /**
+   * Method to process the validateForm hook
+   *
+   * @param $formName
+   * @param $fields
+   * @param $files
+   * @param $form
+   * @param $errors
+   */
+  public static function validateForm($formName, &$fields, &$files, &$form, &$errors) {
+    switch ($formName) {
+      case "CRM_Member_Form_Membership":
+        // if we do have a soft_credit_contact_id but an empty soft_credit_type AND SEP is installed, use default
+        // soft credit type
+        if (isset($fields['soft_credit_type_id']) && empty($fields['soft_credit_type_id'])) {
+          if (isset($fields['soft_credit_contact_id']) && !empty($fields['soft_credit_contact_id']) && CRM_Someoneelsepays_Utils::isSepInstalledAndActive()) {
+            $fields['soft_credit_type_id'] = CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId();
+            $form->setElementError('soft_credit_type_id', NULL);
+          }
+        }
+        break;
     }
   }
 
@@ -719,7 +741,10 @@ class CRM_Someoneelsepays_Sep {
         }
         break;
       case CRM_Core_Action::ADD:
-        $form->setDefaults(['soft_credit_type_id' => CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId()]);
+        $softCreditTypeId = CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId();
+        $defaults['soft_credit_type_id'] = $softCreditTypeId;
+        $form->setDefaults($defaults);
+        //$form->setDefaults(['soft_credit_type_id' => CRM_Someoneelsepays_Config::singleton()->getSepSoftCreditTypeId()]);
         CRM_Core_Region::instance('page-body')->add(['template' => 'SepMembershipAdd.tpl']);
         break;
     }  }
@@ -928,12 +953,12 @@ class CRM_Someoneelsepays_Sep {
     $result = [];
     $latestQuery = 'SELECT MAX(contribution_id) FROM ' . $this->_entityTable .' WHERE ' . $this->_entityIdColumn . ' = %1';
     $latestContributionId = CRM_Core_DAO::singleValueQuery($latestQuery, [1 => [$entityId, 'Integer']]);
-    
+
     // if there is no contribution, the $latestContributionId will be NULL. If the $latestContributionId is NULL the next query will give a error, so we return here NULL
     if(empty($latestContributionId)){
         return NULL;
     }
-    
+
     $query = 'SELECT cont.contact_id as payer_id, payer.display_name AS payer_display_name, 
       base.contact_id AS beneficiary_id, bene.display_name AS beneficiary_display_name,
       "' . $entityType . '" AS entity_type, pay.' . $this->_entityIdColumn . ' AS entity_id, cont.id AS contribution_id,
