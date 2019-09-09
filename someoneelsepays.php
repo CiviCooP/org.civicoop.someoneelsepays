@@ -34,7 +34,6 @@ function someoneelsepays_civicrm_buildForm($formName, &$form) {
  * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_validateForm/
  */
 function someoneelsepays_civicrm_validateForm($formName, &$fields, &$files, &$form, &$errors) {
-  Civi::log()->debug('formName is ' . $formName);
   CRM_Someoneelsepays_Sep::validateForm($formName, $fields, $files, $form, $errors);
 }
 
