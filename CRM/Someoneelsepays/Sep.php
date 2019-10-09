@@ -141,7 +141,7 @@ class CRM_Someoneelsepays_Sep {
     $result = [];
     $queryArray = [];
     if (!isset($params['entity_type'])) {
-      $params['entity_type'] = $this->findEntityTypeForContribution($params['contribution_id']);
+      $params['entity_type'] = CRM_Someoneelsepays_Sep::findEntityTypeForContribution($params['contribution_id']);
     }
     $this->setDaoStuffWithType($params['entity_type']);
     // use contribution_id if set
@@ -168,7 +168,7 @@ class CRM_Someoneelsepays_Sep {
    * @param $contributionId
    * @return string
    */
-  private function findEntityTypeForContribution($contributionId) {
+  private static function findEntityTypeForContribution($contributionId) {
     $query = 'SELECT COUNT(*) FROM civicrm_membership_payment WHERE contribution_id = %1';
     $count = CRM_Core_DAO::singleValueQuery($query, [
        1 => [$contributionId, 'Integer'],
@@ -278,6 +278,121 @@ class CRM_Someoneelsepays_Sep {
         self::addToParticipant($form);
         break;
 
+      case 'CRM_Contribute_Form_ContributionView':
+        self::addToContributionView($form);
+        break;
+    }
+  }
+
+  /**
+   * Method to add sep data to contribution view if applicable
+   *
+   * @param $form
+   * @throws CRM_Core_Exception
+   */
+  public static function addToContributionView(&$form) {
+    // only if this is a SEP contribution
+    $contributionId = (int) CRM_Utils_Request::retrieve('id', 'Integer');
+    if (self::isSepContribution($contributionId)) {
+      // get data and add template depending on the type (membership or participant)
+      $sepType = self::findEntityTypeForContribution($contributionId);
+      switch ($sepType) {
+        case 'membership':
+          self::addContributionMembershipView($contributionId, $form);
+          break;
+        case 'participant':
+          self::addContributionParticipantView($contributionId, $form);
+          break;
+      }
+    }
+  }
+
+  /**
+   * Method to determine if a contribution is a SEP contribution
+   *
+   * @param $contributionId
+   * @return bool
+   */
+  public static function isSepContribution($contributionId) {
+    try {
+      $sepData = civicrm_api3('Sep', 'getsingle', ['contribution_id' => $contributionId]);
+      if (isset($sepData['payer_id']) && isset($sepData['beneficiary_id'])) {
+        if ($sepData['payer_id'] != $sepData['beneficiary_id']) {
+          return TRUE;
+        }
+      }
+    }
+    catch (CiviCRM_API3_Exception $ex) {
+    }
+    return FALSE;
+  }
+
+  /**
+   * Method to add the membership specific data to a contribution view
+   *
+   * @param $contributionId
+   * @param $form
+   */
+  private static function addContributionMembershipView($contributionId, &$form) {
+    $query = "SELECT cc.contact_id AS payer_id, cm.contact_id AS beneficiary_id, 
+            cc.total_amount, cmt.name AS membership_type, cms.label AS status, cm.start_date, cm.end_date, 
+            cm.source, cm.id AS membership_id, payer.display_name AS payer_name, bene.display_name AS beneficiary_name
+            FROM civicrm_contribution AS cc
+            LEFT JOIN civicrm_membership_payment AS cmp ON cc.id = cmp.contribution_id
+            LEFT JOIN civicrm_membership AS cm ON cmp.membership_id = cm.id
+            LEFT JOIN civicrm_membership_type AS cmt ON cm.membership_type_id = cmt.id
+            LEFT JOIN civicrm_membership_status AS cms ON cm.status_id = cms.id
+            LEFT JOIN civicrm_contact AS payer ON cc.contact_id = payer.id
+            LEFT JOIN civicrm_contact AS bene ON cm.contact_id = bene.id
+            WHERE cc.id = %1";
+    $membershipData = CRM_Core_DAO::executeQuery($query, [1 => [$contributionId, "Integer"]]);
+    if ($membershipData->fetch()) {
+      $form->assign('sep_data', CRM_Someoneelsepays_Utils::moveDaoToArray($membershipData));
+      $viewUrl = CRM_Utils_System::url('civicrm/contact/view/membership', 'reset=1&action=view&id='
+        . $membershipData->membership_id . '&cid=' . $membershipData->beneficiary_id . '&action=view&context=membership', TRUE);
+      $editUrl = CRM_Utils_System::url('civicrm/contact/view/membership', 'reset=1&action=update&id='
+        . $membershipData->membership_id . '&cid=' . $membershipData->beneficiary_id . '&action=view&context=membership', TRUE);
+      $sepActionLinks[] = '<a class="action-item crm-hover-button" title="View Membership" href="' . $viewUrl . '">' . ts("View") . '</a>';
+      $sepActionLinks[] = '<a class="action-item crm-hover-button" title="Edit Membership" href="' . $editUrl . '">' . ts("Edit") . '</a>';
+      $form->assign('sep_action_links', $sepActionLinks);
+      CRM_Core_Region::instance('page-body')->add(['template' => 'SepContributionMembershipView.tpl']);
+    }
+  }
+
+  /**
+   * Method to add the participant specific data to a contribution view
+   *
+   * @param $contributionId
+   * @param $form
+   */
+  private static function addContributionParticipantView($contributionId, &$form) {
+    $eventTypeOptionGroupId = CRM_Someoneelsepays_Config::singleton()->getEventTypeOptionGroupId();
+    $roleOptionGroupId = CRM_Someoneelsepays_Config::singleton()->getRoleOptionGroupId();
+    $query = "SELECT cc.contact_id AS payer_id, cp.contact_id AS beneficiary_id, cc.total_amount, 
+      ce.title AS event_title, evtp.label AS event_type, cpst.label AS participant_status, 
+      rtp.label AS participant_role, ce.start_date AS event_date, payer.display_name AS payer_name, 
+      bene.display_name AS beneficiary_name, cp.id AS participant_id
+      FROM civicrm_contribution AS cc 
+      LEFT JOIN civicrm_participant_payment AS cpp ON cc.id = cpp.contribution_id
+      LEFT JOIN civicrm_participant AS cp ON cpp.participant_id = cp.id
+      LEFT JOIN civicrm_event AS ce ON cp.event_id = ce.id
+      LEFT JOIN civicrm_option_value AS evtp ON ce.event_type_id = evtp.value AND evtp.option_group_id = " . $eventTypeOptionGroupId . " 
+      LEFT JOIN civicrm_participant_status_type AS cpst ON cp.status_id = cpst.id
+      LEFT JOIN civicrm_option_value AS rtp ON cp.role_id = rtp.value AND rtp.option_group_id = " . $roleOptionGroupId . "
+      LEFT JOIN civicrm_contact AS payer ON cc.contact_id = payer.id
+      LEFT JOIN civicrm_contact AS bene ON cp.contact_id = bene.id
+      WHERE cc.id = %1";
+    $participantData = CRM_Core_DAO::executeQuery($query, [1 => [$contributionId, "Integer"]]);
+    if ($participantData->fetch()) {
+      $form->assign('sep_data', CRM_Someoneelsepays_Utils::moveDaoToArray($participantData));
+      $viewUrl = CRM_Utils_System::url('civicrm/contact/view/participant', 'reset=1&action=view&id='
+        . $participantData->participant_id . '&cid=' . $participantData->beneficiary_id . '&action=view&context=participant', TRUE);
+      $editUrl = CRM_Utils_System::url('civicrm/contact/view/participant', 'reset=1&action=update&id='
+        . $participantData->participant_id . '&cid=' . $participantData->beneficiary_id . '&action=view&context=participant', TRUE);
+      $sepActionLinks[] = '<a class="action-item crm-hover-button" title="View Participant" href="' . $viewUrl . '">' . ts("View") . '</a>';
+      $sepActionLinks[] = '<a class="action-item crm-hover-button" title="Edit Participant" href="' . $editUrl . '">' . ts("Edit") . '</a>';
+      $form->assign('sep_action_links', $sepActionLinks);
+      CRM_Core_Region::instance('page-body')->add(['template' => 'SepContributionParticipantView.tpl']);
     }
   }
 

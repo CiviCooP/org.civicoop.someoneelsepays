@@ -1,4 +1,5 @@
 <?php
+use CRM_Someoneelsepays_ExtensionUtil as E;
 
 /**
  * Class for Someone Else Pays Configuration
@@ -14,6 +15,8 @@ class CRM_Someoneelsepays_Config {
 
   private $_contributionStatusOptionGroupId = NULL;
   private $_sepSoftCreditTypeId = NULL;
+  private $_eventTypeOptionGroupId = NULL;
+  private $_roleOptionGroupId = NULL;
 
   /**
    * CRM_Someoneelsepays_Config constructor.
@@ -26,7 +29,7 @@ class CRM_Someoneelsepays_Config {
       ));
     }
     catch (CiviCRM_API3_Exception $ex) {
-      CRM_Core_Error::createError(ts('Could not find an option group with the name contribution_status in extension org.civicoop.someoneelsepays. Contact your system administrator!'));
+      CRM_Core_Error::createError(E::ts('Could not find an option group with the name contribution_status.'));
     }
     try {
       $this->_sepSoftCreditTypeId = civicrm_api3('OptionValue', 'getvalue', array(
@@ -36,14 +39,53 @@ class CRM_Someoneelsepays_Config {
       ));
     }
     catch (CiviCRM_API3_Exception $ex) {
-      CRM_Core_Error::createError(ts('Could not find the soft credit type id for someone else pays in extension org.civicoop.someoneelsepays. Contact your system administrator!'));
+      CRM_Core_Error::createError(E::ts('Could not find the soft credit type id for someone else pays.'));
     }
+    try {
+      $result = civicrm_api3('OptionGroup', 'get', [
+        'sequential' => 1,
+        'return' => ["id", "name"],
+        'name' => ['IN' => ["participant_role", "event_type"]],
+      ]);
+      foreach ($result['values'] as $apiSet) {
+        switch ($apiSet['name']) {
+          case 'event_type':
+            $this->_eventTypeOptionGroupId = $apiSet['id'];
+            break;
+
+          case 'participant_role':
+            $this->_roleOptionGroupId = $apiSet['id'];
+            break;
+        }
+      }
+    }
+    catch (CiviCRM_API3_Exception $ex) {
+      CRM_Core_Error::createError(E::ts('Could not find an option group for event_type or participant_role'));
+    }
+  }
+
+  /**
+   * Getter for event type option group id
+   *
+   * @return int|null
+   */
+  public function getEventTypeOptionGroupId() {
+    return $this->_eventTypeOptionGroupId;
+  }
+
+  /**
+   * Getter for participant role option group id
+   *
+   * @return int|null
+   */
+  public function getRoleOptionGroupId() {
+    return $this->_roleOptionGroupId;
   }
 
   /**
    * Getter for sep soft credit type id
    *
-   * @return array|null
+   * @return int|null
    */
   public function getSepSoftCreditTypeId() {
     return $this->_sepSoftCreditTypeId;
