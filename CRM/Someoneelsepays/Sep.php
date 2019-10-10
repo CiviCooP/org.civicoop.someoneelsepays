@@ -352,9 +352,6 @@ class CRM_Someoneelsepays_Sep {
         . $membershipData->membership_id . '&cid=' . $membershipData->beneficiary_id . '&action=view&context=membership', TRUE);
       $editUrl = CRM_Utils_System::url('civicrm/contact/view/membership', 'reset=1&action=update&id='
         . $membershipData->membership_id . '&cid=' . $membershipData->beneficiary_id . '&action=view&context=membership', TRUE);
-      $sepActionLinks[] = '<a class="action-item crm-hover-button" title="View Membership" href="' . $viewUrl . '">' . ts("View") . '</a>';
-      $sepActionLinks[] = '<a class="action-item crm-hover-button" title="Edit Membership" href="' . $editUrl . '">' . ts("Edit") . '</a>';
-      $form->assign('sep_action_links', $sepActionLinks);
       CRM_Core_Region::instance('page-body')->add(['template' => 'SepContributionMembershipView.tpl']);
     }
   }
@@ -389,9 +386,6 @@ class CRM_Someoneelsepays_Sep {
         . $participantData->participant_id . '&cid=' . $participantData->beneficiary_id . '&action=view&context=participant', TRUE);
       $editUrl = CRM_Utils_System::url('civicrm/contact/view/participant', 'reset=1&action=update&id='
         . $participantData->participant_id . '&cid=' . $participantData->beneficiary_id . '&action=view&context=participant', TRUE);
-      $sepActionLinks[] = '<a class="action-item crm-hover-button" title="View Participant" href="' . $viewUrl . '">' . ts("View") . '</a>';
-      $sepActionLinks[] = '<a class="action-item crm-hover-button" title="Edit Participant" href="' . $editUrl . '">' . ts("Edit") . '</a>';
-      $form->assign('sep_action_links', $sepActionLinks);
       CRM_Core_Region::instance('page-body')->add(['template' => 'SepContributionParticipantView.tpl']);
     }
   }
@@ -948,10 +942,7 @@ class CRM_Someoneelsepays_Sep {
         . $sepData['contribution_id'] . '&cid=' . $sepData['payer_id'] . '&action=view&context=contribution', TRUE);
       $editUrl = CRM_Utils_System::url('civicrm/contact/view/contribution', 'reset=1&action=update&id='
         . $sepData['contribution_id'] . '&cid=' . $sepData['payer_id'] . '&context=contribution', TRUE);
-      $sepActionLinks[] = '<a class="action-item crm-hover-button" title="View Contribution" href="' . $viewUrl . '">' . ts("View") . '</a>';
-      $sepActionLinks[] = '<a class="action-item crm-hover-button" title="Edit Contribution" href="' . $editUrl . '">' . ts("Edit") . '</a>';
       $form->assign('sep_data', $sepData);
-      $form->assign('sep_action_links', $sepActionLinks);
       CRM_Core_Region::instance('page-body')->add(['template' => 'SepView.tpl']);
     }
   }

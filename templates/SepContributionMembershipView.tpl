@@ -12,7 +12,6 @@
           <th>{ts}Start Date{/ts}</th>
           <th>{ts}End Date{/ts}</th>
           <th>{ts}Source{/ts}</th>
-          <th>&nbsp;</th>
         </tr>
       </thead>
       <tbody>
@@ -25,9 +24,6 @@
           <td>{$sep_data.start_date|truncate:10:''|crmDate}</td>
           <td>{$sep_data.end_date|truncate:10:''|crmDate}</td>
           <td>{$sep_data.source}</td>
-          <td>
-            <span>{foreach from=$sep_action_links item=action_link}{$action_link}&nbsp;{/foreach}</span>
-          </td>
         </tr>
       </tbody>
     </table>

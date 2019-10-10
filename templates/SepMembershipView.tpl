@@ -13,7 +13,6 @@
       <th>{ts}Received{/ts}</th>
       <th>{ts}Invoice ID{/ts}</th>
       <th>{ts}CreditNote ID{/ts}</th>
-      <th>&nbsp;</th>
     </tr>
     </thead>
     <tbody>
@@ -26,9 +25,6 @@
       <td>{$sep_data.receive_date|truncate:10:''|crmDate}</td>
       <td>{$sep_data.invoice_id}</td>
       <td>{$sep_data.creditnote_id}</td>
-      <td>
-        <span>{foreach from=$sep_action_links item=action_link}{$action_link}&nbsp;{/foreach}</span>
-      </td>
     </tr>
     </tbody>
   </table>
